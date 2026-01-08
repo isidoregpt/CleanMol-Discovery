@@ -29,6 +29,8 @@ export default function Page() {
 
   const [running, setRunning] = useState(false);
   const [log, setLog] = useState("");
+  const [logFile, setLogFile] = useState<string | null>(null);
+  const [runSuccess, setRunSuccess] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -79,6 +81,8 @@ export default function Page() {
 
   async function onRun() {
     setRunning(true);
+    setLogFile(null);
+    setRunSuccess(null);
     setLog("Starting pipeline...\n");
     try {
       const payload = {
@@ -94,10 +98,36 @@ export default function Page() {
       };
       setLog((prev) => prev + "Sending request to backend...\n");
       const res = await runPipeline(payload);
-      setLog((prev) => prev + "\nPipeline complete!\n\n" + JSON.stringify(res, null, 2));
+
+      // Extract log file path
+      if (res.log_file) {
+        setLogFile(res.log_file);
+      }
+
+      // Track success status
+      setRunSuccess(res.ok === true);
+
+      // Format output
+      const docsProcessed = res.run?.documents_processed?.length || 0;
+      const errorsCount = res.run?.errors?.length || 0;
+
+      let summary = "\n--- Pipeline Complete ---\n";
+      summary += `Status: ${res.ok ? 'SUCCESS' : 'FAILED'}\n`;
+      summary += `Documents Processed: ${docsProcessed}\n`;
+      summary += `Errors: ${errorsCount}\n`;
+
+      if (res.log_file) {
+        summary += `\nLog File: ${res.log_file}\n`;
+      }
+
+      summary += "\n--- Full Response ---\n";
+      summary += JSON.stringify(res, null, 2);
+
+      setLog((prev) => prev + summary);
     } catch (e: unknown) {
       const errorMessage = e instanceof Error ? e.message : String(e);
       setLog((prev) => prev + "\nERROR: " + errorMessage);
+      setRunSuccess(false);
     } finally {
       setRunning(false);
     }
@@ -225,10 +255,49 @@ export default function Page() {
                   <span className="text-sm">Pipeline running...</span>
                 </div>
               )}
+              {runSuccess !== null && !running && (
+                <div className={`flex items-center gap-2 ${runSuccess ? 'text-emerald-400' : 'text-red-400'}`}>
+                  <span className={`h-2 w-2 rounded-full ${runSuccess ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                  <span className="text-sm">
+                    {runSuccess ? 'Pipeline completed successfully' : 'Pipeline completed with errors'}
+                  </span>
+                </div>
+              )}
             </div>
           </Card>
         </div>
       </div>
+
+      {/* Log File Info */}
+      {logFile && (
+        <Card title="Pipeline Log">
+          <div className="space-y-3">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 mt-1">
+                <svg className="h-5 w-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-white">Detailed Log File Created</p>
+                <p className="text-xs text-white/60 mt-1 break-all font-mono bg-black/30 rounded px-2 py-1">
+                  {logFile}
+                </p>
+                <p className="text-xs text-white/50 mt-2">
+                  Open this Markdown file in any text editor or Markdown viewer to see the complete pipeline report with:
+                </p>
+                <ul className="text-xs text-white/50 mt-1 ml-4 list-disc space-y-0.5">
+                  <li>Stage-by-stage timing and statistics</li>
+                  <li>API call logs with token usage</li>
+                  <li>Errors and warnings summary</li>
+                  <li>Extraction results summary</li>
+                  <li>Recommendations for improvement</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Console */}
       <Card title="Console Output">

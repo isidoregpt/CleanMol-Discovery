@@ -1,13 +1,18 @@
 import json
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 from .context_slice import slice_pages
 from .repair_opus import repair_entity_with_opus
 from .db import insert_repair, update_molecule, update_experiment, update_result, insert_evidence
+from .logger import PipelineLogger
+
 
 def _utc_iso() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00","Z")
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
 
 def _index(extraction: dict) -> dict:
     return {
@@ -16,10 +21,21 @@ def _index(extraction: dict) -> dict:
         "result": {r.get("result_id"): r for r in (extraction.get("results") or [])},
     }
 
+
 def auto_repair(*, conn, doc_id: str, bundle_dir: Path, paper_md: str, extraction: dict,
-                audit_json: dict, anthropic_key: str, opus_model: str, max_repairs: int = 25) -> dict:
+                audit_json: dict, anthropic_key: str, opus_model: str, max_repairs: int = 25,
+                logger: Optional[PipelineLogger] = None) -> dict:
+    """
+    Auto-repair entities that failed audit.
+
+    Returns:
+        dict with repair report and updated extraction
+    """
+    start_time = time.time()
+
     idx = _index(extraction)
     applied = []
+    failed = []
     attempted = 0
 
     for a in (audit_json.get("audits") or []):
@@ -54,9 +70,10 @@ def auto_repair(*, conn, doc_id: str, bundle_dir: Path, paper_md: str, extractio
             repair_out = repair_entity_with_opus(
                 anthropic_key=anthropic_key, model=opus_model,
                 entity_type=et, entity=original,
-                verdict=a.get("verdict","AMBIGUOUS"),
+                verdict=a.get("verdict", "AMBIGUOUS"),
                 issues=issues,
-                page_slice_md=page_slice_md
+                page_slice_md=page_slice_md,
+                logger=logger
             )
             candidate = repair_out.get("repaired_entity") or original
 
@@ -81,8 +98,9 @@ def auto_repair(*, conn, doc_id: str, bundle_dir: Path, paper_md: str, extractio
             idx[et][eid] = candidate
             did_apply = True
             applied.append({"entity_type": et, "entity_id": eid, "verdict": a.get("verdict")})
-        except Exception:
+        except Exception as e:
             did_apply = False
+            failed.append({"entity_type": et, "entity_id": eid, "error": str(e)})
 
         insert_repair(conn, {
             "repair_id": str(uuid.uuid4()),
@@ -104,7 +122,21 @@ def auto_repair(*, conn, doc_id: str, bundle_dir: Path, paper_md: str, extractio
     repaired["experiments"] = list(idx["experiment"].values())
     repaired["results"] = list(idx["result"].values())
 
+    elapsed = time.time() - start_time
+
     (bundle_dir / "extraction_repaired.json").write_text(
         json.dumps(repaired, indent=2, ensure_ascii=False), encoding="utf-8"
     )
-    return {"repairs_attempted": attempted, "repairs_applied": applied, "extraction": repaired}
+
+    return {
+        "repairs_attempted": attempted,
+        "repairs_applied": applied,
+        "repairs_failed": failed,
+        "extraction": repaired,
+        "_meta": {
+            "time": elapsed,
+            "attempted": attempted,
+            "applied": len(applied),
+            "failed": len(failed)
+        }
+    }
