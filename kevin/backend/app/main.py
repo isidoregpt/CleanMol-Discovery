@@ -35,4 +35,8 @@ def api_run(payload: RunPayload):
         options=payload.options or {},
     )
     ok = (info.get("run", {}).get("status") == "ok")
-    return {"ok": ok, "run": info}
+    return {
+        "ok": ok,
+        "run": info,
+        "log_file": info.get("log_file")
+    }
