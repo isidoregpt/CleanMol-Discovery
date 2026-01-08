@@ -21,33 +21,74 @@ Kevin takes a folder of PDFs (papers, patents) and produces:
 
 ## Quick Start (Windows)
 
-### 1. Backend Setup
+### First-Time Installation
+
+1. Make sure you have installed:
+   - [Python 3.10+](https://www.python.org/downloads/) (check "Add to PATH" during install)
+   - [Node.js 18+](https://nodejs.org/) (LTS version)
+
+2. Double-click **`install.bat`** in the repository root, or run from command prompt:
+   ```
+   install.bat
+   ```
+
+3. Wait for installation to complete (typically 2-3 minutes)
+
+### Running the Application
+
+1. Double-click **`run.bat`** in the repository root, or run from command prompt:
+   ```
+   run.bat
+   ```
+
+2. Your browser will automatically open to http://localhost:3000
+
+3. Enter your API keys and folder paths, then click "Run Pipeline"
+
+### Stopping the Application
+
+- Close the two terminal windows that opened, OR
+- Double-click **`stop.bat`** to kill all servers
+
+### Default Folders
+
+The installer creates these folders for convenience:
+- **Input:** `C:\Users\YourName\Kevin\input` (place PDFs here)
+- **Output:** `C:\Users\YourName\Kevin\output` (dataset saved here)
+
+---
+
+## Manual Setup (Alternative)
+
+If you prefer manual setup or are on macOS/Linux:
+
+### Backend Setup
 ```powershell
-cd backend
+cd kevin/backend
 python -m venv .venv
 .\.venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8787
 ```
 
-### 2. Frontend Setup
+### Frontend Setup
 ```powershell
-cd frontend
+cd kevin/frontend
 npm install
 npm run dev
 ```
 
-### 3. Open the App
+### Open the App
 
 Navigate to: http://localhost:3000
 
-### 4. Configure
+### Configure
 
 1. **API Keys**: Enter your Anthropic (required), OpenAI, and Gemini keys
 2. **Folders**: Paste full paths (e.g., `C:\data\pdfs` and `C:\data\output`)
 3. **Models**: Adjust model names if needed
 
-### 5. Run
+### Run
 
 Click "Run Pipeline" and watch the console output.
 
