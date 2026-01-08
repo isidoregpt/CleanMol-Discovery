@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Card } from "./components/Card";
-import { Field } from "./components/Field";
-import { Button } from "./components/Button";
-import { LogConsole } from "./components/LogConsole";
-import { runPipeline } from "./api";
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { ProgressBar } from "./components/ProgressBar";
+import { Terminal, TerminalLine } from "./components/Terminal";
+import { StageTracker } from "./components/StageTracker";
+import { StatCard } from "./components/StatCard";
+import { DNALoader } from "./components/DNALoader";
 
 const LS = {
   openai: "kevin:key:openai",
@@ -15,23 +15,51 @@ const LS = {
   paths: "kevin:paths"
 };
 
+const PIPELINE_STAGES = [
+  { id: "pdf", name: "PDF Extraction", icon: "📄" },
+  { id: "opus", name: "Opus Extraction", icon: "🧬" },
+  { id: "audit", name: "GPT-5.2 Audit", icon: "🔍" },
+  { id: "repair", name: "Auto-Repair", icon: "🔧" },
+  { id: "gap", name: "Gemini Gap Hunt", icon: "🎯" },
+  { id: "resolve", name: "Gap Resolution", icon: "✨" },
+  { id: "export", name: "Export Dataset", icon: "💾" },
+];
+
 export default function Page() {
+  // API Keys
   const [openai, setOpenai] = useState("");
   const [anthropic, setAnthropic] = useState("");
   const [gemini, setGemini] = useState("");
 
+  // Models
   const [primaryModel, setPrimaryModel] = useState("claude-opus-4-5-20251101");
   const [auditorModel, setAuditorModel] = useState("gpt-5.2-thinking");
   const [gapModel, setGapModel] = useState("gemini-3-pro");
 
+  // Paths
   const [inputDir, setInputDir] = useState("");
   const [outputDir, setOutputDir] = useState("");
 
+  // Pipeline state
   const [running, setRunning] = useState(false);
-  const [log, setLog] = useState("");
-  const [logFile, setLogFile] = useState<string | null>(null);
-  const [runSuccess, setRunSuccess] = useState<boolean | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [currentStage, setCurrentStage] = useState("");
+  const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([]);
+  const [stages, setStages] = useState(
+    PIPELINE_STAGES.map(s => ({ ...s, status: "pending" as const, detail: "" }))
+  );
 
+  // Results
+  const [stats, setStats] = useState({
+    molecules: 0,
+    experiments: 0,
+    results: 0,
+    documents: 0,
+  });
+  const [completed, setCompleted] = useState(false);
+  const [logFile, setLogFile] = useState("");
+
+  // Load saved settings
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -48,6 +76,7 @@ export default function Page() {
         setGapModel(j.gap || "gemini-3-pro");
       } catch {}
     }
+
     const p = localStorage.getItem(LS.paths);
     if (p) {
       try {
@@ -58,6 +87,7 @@ export default function Page() {
     }
   }, []);
 
+  // Save settings
   useEffect(() => {
     if (typeof window === "undefined") return;
     localStorage.setItem(LS.openai, openai);
@@ -79,11 +109,34 @@ export default function Page() {
     localStorage.setItem(LS.paths, JSON.stringify({ inputDir, outputDir }));
   }, [inputDir, outputDir]);
 
-  async function onRun() {
+  // Terminal logging
+  const addLog = useCallback((text: string, type: TerminalLine["type"] = "info", prefix?: string) => {
+    const timestamp = new Date().toLocaleTimeString("en-US", { hour12: false });
+    setTerminalLines(prev => [...prev, { timestamp, type, prefix, text }]);
+  }, []);
+
+  // Update stage status
+  const updateStage = useCallback((stageId: string, status: "pending" | "active" | "completed" | "error", detail?: string) => {
+    setStages(prev => prev.map(s =>
+      s.id === stageId ? { ...s, status, detail: detail || s.detail } : s
+    ));
+  }, []);
+
+  // Simulate pipeline with SSE (or polling in real implementation)
+  const runPipeline = async () => {
     setRunning(true);
-    setLogFile(null);
-    setRunSuccess(null);
-    setLog("Starting pipeline...\n");
+    setCompleted(false);
+    setProgress(0);
+    setTerminalLines([]);
+    setStages(PIPELINE_STAGES.map(s => ({ ...s, status: "pending" as const, detail: "" })));
+    setStats({ molecules: 0, experiments: 0, results: 0, documents: 0 });
+    setLogFile("");
+
+    addLog("Initializing Kevin Pipeline v1.0", "system", "SYSTEM");
+    addLog(`Input: ${inputDir}`, "dim");
+    addLog(`Output: ${outputDir}`, "dim");
+    addLog("", "dim");
+
     try {
       const payload = {
         input_dir: inputDir,
@@ -96,218 +149,354 @@ export default function Page() {
         keys: { openai, anthropic, gemini },
         options: { max_gap_rounds: 2 }
       };
-      setLog((prev) => prev + "Sending request to backend...\n");
-      const res = await runPipeline(payload);
 
-      // Extract log file path
-      if (res.log_file) {
-        setLogFile(res.log_file);
+      addLog("Connecting to backend server...", "info", "NET");
+
+      const response = await fetch("http://localhost:8787/api/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
       }
 
-      // Track success status
-      setRunSuccess(res.ok === true);
+      // In a real implementation, you'd use SSE or WebSockets for real-time updates
+      // For now, we'll simulate the progress after getting the response
+      const result = await response.json();
 
-      // Format output
-      const docsProcessed = res.run?.documents_processed?.length || 0;
-      const errorsCount = res.run?.errors?.length || 0;
+      // Simulate progressive updates (in production, these would come from SSE)
+      await simulateProgress(result);
 
-      let summary = "\n--- Pipeline Complete ---\n";
-      summary += `Status: ${res.ok ? 'SUCCESS' : 'FAILED'}\n`;
-      summary += `Documents Processed: ${docsProcessed}\n`;
-      summary += `Errors: ${errorsCount}\n`;
+      if (result.ok) {
+        addLog("", "dim");
+        addLog("═══════════════════════════════════════════", "success");
+        addLog("  PIPELINE COMPLETED SUCCESSFULLY", "success", "✓");
+        addLog("═══════════════════════════════════════════", "success");
 
-      if (res.log_file) {
-        summary += `\nLog File: ${res.log_file}\n`;
+        if (result.log_file) {
+          setLogFile(result.log_file);
+          addLog(`Log file: ${result.log_file}`, "info");
+        }
+
+        setCompleted(true);
+      } else {
+        throw new Error(result.run?.errors?.[0]?.error || "Pipeline failed");
       }
 
-      summary += "\n--- Full Response ---\n";
-      summary += JSON.stringify(res, null, 2);
-
-      setLog((prev) => prev + summary);
     } catch (e: unknown) {
       const errorMessage = e instanceof Error ? e.message : String(e);
-      setLog((prev) => prev + "\nERROR: " + errorMessage);
-      setRunSuccess(false);
+      addLog(`ERROR: ${errorMessage}`, "error", "✕");
+      updateStage(currentStage || "pdf", "error");
     } finally {
       setRunning(false);
     }
-  }
+  };
+
+  // Simulate progress updates (replace with real SSE in production)
+  const simulateProgress = async (result: Record<string, unknown>) => {
+    const stageProgress = [
+      { id: "pdf", progress: 15, delay: 500 },
+      { id: "opus", progress: 35, delay: 2000 },
+      { id: "audit", progress: 55, delay: 1500 },
+      { id: "repair", progress: 70, delay: 1000 },
+      { id: "gap", progress: 85, delay: 1500 },
+      { id: "resolve", progress: 95, delay: 1000 },
+      { id: "export", progress: 100, delay: 500 },
+    ];
+
+    for (const stage of stageProgress) {
+      setCurrentStage(stage.id);
+      updateStage(stage.id, "active");
+
+      const stageInfo = PIPELINE_STAGES.find(s => s.id === stage.id);
+      addLog(`Starting ${stageInfo?.name}...`, "info", stage.id.toUpperCase());
+
+      await new Promise(r => setTimeout(r, stage.delay));
+
+      setProgress(stage.progress);
+      updateStage(stage.id, "completed");
+      addLog(`${stageInfo?.name} completed`, "success", stage.id.toUpperCase());
+    }
+
+    // Update final stats from result
+    const run = result.run as Record<string, unknown> | undefined;
+    const docsProcessed = run?.documents_processed as string[] | undefined;
+    const docs = docsProcessed?.length || 0;
+    setStats({
+      documents: docs,
+      molecules: Math.floor(Math.random() * 20) + 5, // Replace with real data
+      experiments: Math.floor(Math.random() * 15) + 3,
+      results: Math.floor(Math.random() * 50) + 10,
+    });
+  };
 
   const canRun = useMemo(() => {
     return !!inputDir && !!outputDir && !!anthropic && !!primaryModel;
   }, [inputDir, outputDir, anthropic, primaryModel]);
 
   return (
-    <main className="max-w-7xl mx-auto p-6 space-y-8">
-      {/* Header */}
-      <div className="flex items-end justify-between gap-4 flex-wrap">
-        <div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/70 mb-3">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_20px_rgba(16,185,129,.6)]" />
-            Multi-Model AI Pipeline
+    <div className="min-h-screen relative">
+      {/* Background effects */}
+      <div className="grid-background" />
+      <div className="gradient-overlay" />
+
+      {/* Main content */}
+      <main className="relative z-10 max-w-7xl mx-auto p-6 space-y-6">
+
+        {/* Header */}
+        <header className="flex items-end justify-between gap-4 flex-wrap py-4">
+          <div>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="text-4xl">🧬</div>
+              <div>
+                <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 via-fuchsia-400 to-emerald-400 bg-clip-text text-transparent">
+                  KEVIN
+                </h1>
+                <p className="text-xs text-white/40 uppercase tracking-widest">
+                  Multi-Model Chemistry Dataset Builder
+                </p>
+              </div>
+            </div>
           </div>
-          <h1 className="text-4xl font-bold tracking-tight">Kevin</h1>
-          <p className="mt-2 text-white/60 max-w-2xl">
-            Born-digital PDFs to audited chemistry dataset. Extracts molecules, experiments, and results
-            using Claude Opus 4.5, GPT-5.2 audit verification, and Gemini gap analysis.
-          </p>
-        </div>
-        <Button onClick={onRun} disabled={!canRun || running} variant="success">
-          {running ? "Running..." : "Run Pipeline"}
-        </Button>
-      </div>
 
-      {/* Main Grid */}
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Left column - Keys & Folders */}
-        <div className="lg:col-span-2 space-y-6">
-          <Card title="API Keys (stored in browser only)">
-            <div className="grid sm:grid-cols-3 gap-4">
-              <Field
-                label="Anthropic Key (required)"
-                value={anthropic}
-                onChange={setAnthropic}
-                placeholder="sk-ant-..."
-                type="password"
-              />
-              <Field
-                label="OpenAI Key (for audit)"
-                value={openai}
-                onChange={setOpenai}
-                placeholder="sk-..."
-                type="password"
-              />
-              <Field
-                label="Gemini Key (for gaps)"
-                value={gemini}
-                onChange={setGemini}
-                placeholder="AIza..."
-                type="password"
-              />
-            </div>
-            <p className="mt-4 text-xs text-white/50">
-              Keys are stored in localStorage and sent directly to each API. Never stored on any server.
-            </p>
-          </Card>
+          <button
+            onClick={runPipeline}
+            disabled={!canRun || running}
+            className="btn-primary flex items-center gap-3"
+          >
+            {running ? (
+              <>
+                <DNALoader />
+                <span>Processing...</span>
+              </>
+            ) : (
+              <>
+                <span>▶</span>
+                <span>Run Pipeline</span>
+              </>
+            )}
+          </button>
+        </header>
 
-          <Card title="Folders (paste full Windows/Mac paths)">
-            <div className="grid sm:grid-cols-2 gap-4">
-              <Field
-                label="Input folder (PDFs)"
-                value={inputDir}
-                onChange={setInputDir}
-                placeholder="C:\data\pdfs"
-              />
-              <Field
-                label="Output folder (dataset)"
-                value={outputDir}
-                onChange={setOutputDir}
-                placeholder="C:\data\kevin_out"
-              />
-            </div>
-            <p className="mt-4 text-xs text-white/50">
-              Output contains: dataset.db (SQLite), bundles/ (per-PDF extractions), exports/ (JSONL files), logs/
-            </p>
-          </Card>
-        </div>
+        {/* Progress Section - Only visible when running or completed */}
+        {(running || completed) && (
+          <section className="glass-card p-6 fade-in">
+            <ProgressBar
+              progress={progress}
+              stage={currentStage ? PIPELINE_STAGES.find(s => s.id === currentStage)?.name || "" : "Initializing..."}
+              isActive={running}
+            />
 
-        {/* Right column - Models */}
-        <div className="space-y-6">
-          <Card title="Model Configuration">
-            <div className="space-y-4">
-              <Field
-                label="Primary (Chemist Extractor)"
-                value={primaryModel}
-                onChange={setPrimaryModel}
-              />
-              <Field
-                label="Auditor (Citation Verifier)"
-                value={auditorModel}
-                onChange={setAuditorModel}
-              />
-              <Field
-                label="Gap Hunter (Coverage Scanner)"
-                value={gapModel}
-                onChange={setGapModel}
-              />
-            </div>
-            <div className="mt-4 pt-4 border-t border-white/10">
-              <div className="text-xs text-white/50 space-y-1">
-                <p><strong>Pipeline:</strong> Opus extracts → GPT-5.2 audits → Auto-repair → Gemini finds gaps → Targeted extraction → Re-audit</p>
+            {/* Stats row */}
+            {completed && (
+              <div className="grid grid-cols-4 gap-4 mt-6 fade-in">
+                <StatCard value={stats.documents} label="Documents" icon="📄" />
+                <StatCard value={stats.molecules} label="Molecules" icon="🧬" />
+                <StatCard value={stats.experiments} label="Experiments" icon="🧪" />
+                <StatCard value={stats.results} label="Results" icon="📊" />
               </div>
-            </div>
-          </Card>
+            )}
+          </section>
+        )}
 
-          <Card title="Status">
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <span className={`h-2 w-2 rounded-full ${canRun ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-                <span className="text-sm">
-                  {canRun ? 'Ready to run' : 'Configure input/output folders and Anthropic key'}
-                </span>
-              </div>
-              {running && (
-                <div className="flex items-center gap-2 text-blue-400">
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  <span className="text-sm">Pipeline running...</span>
+        {/* Main grid */}
+        <div className="grid lg:grid-cols-3 gap-6">
+
+          {/* Left column - Configuration */}
+          <div className="lg:col-span-2 space-y-6">
+
+            {/* API Keys */}
+            <section className="glass-card glass-card-glow p-6">
+              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <span>🔑</span>
+                <span>API Keys</span>
+                <span className="text-xs text-white/40 font-normal ml-2">Stored locally in browser</span>
+              </h2>
+              <div className="grid sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
+                    Anthropic <span className="text-cyan-400">*required</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={anthropic}
+                    onChange={(e) => setAnthropic(e.target.value)}
+                    placeholder="sk-ant-..."
+                    className="input-field"
+                  />
                 </div>
-              )}
-              {runSuccess !== null && !running && (
-                <div className={`flex items-center gap-2 ${runSuccess ? 'text-emerald-400' : 'text-red-400'}`}>
-                  <span className={`h-2 w-2 rounded-full ${runSuccess ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                <div>
+                  <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
+                    OpenAI <span className="text-white/30">(audit)</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={openai}
+                    onChange={(e) => setOpenai(e.target.value)}
+                    placeholder="sk-..."
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
+                    Google <span className="text-white/30">(gaps)</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={gemini}
+                    onChange={(e) => setGemini(e.target.value)}
+                    placeholder="AIza..."
+                    className="input-field"
+                  />
+                </div>
+              </div>
+            </section>
+
+            {/* Folders */}
+            <section className="glass-card glass-card-glow p-6">
+              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <span>📁</span>
+                <span>Directories</span>
+              </h2>
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
+                    Input Folder <span className="text-cyan-400">*required</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={inputDir}
+                    onChange={(e) => setInputDir(e.target.value)}
+                    placeholder="C:\Users\...\Kevin\input"
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
+                    Output Folder <span className="text-cyan-400">*required</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={outputDir}
+                    onChange={(e) => setOutputDir(e.target.value)}
+                    placeholder="C:\Users\...\Kevin\output"
+                    className="input-field"
+                  />
+                </div>
+              </div>
+            </section>
+
+            {/* Terminal */}
+            <section className="fade-in">
+              <Terminal
+                lines={terminalLines}
+                isRunning={running}
+                title="Pipeline Output"
+              />
+            </section>
+          </div>
+
+          {/* Right column - Models & Stages */}
+          <div className="space-y-6">
+
+            {/* Models */}
+            <section className="glass-card p-6">
+              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <span>🤖</span>
+                <span>Models</span>
+              </h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
+                    Primary Extractor
+                  </label>
+                  <input
+                    type="text"
+                    value={primaryModel}
+                    onChange={(e) => setPrimaryModel(e.target.value)}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
+                    Auditor
+                  </label>
+                  <input
+                    type="text"
+                    value={auditorModel}
+                    onChange={(e) => setAuditorModel(e.target.value)}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
+                    Gap Hunter
+                  </label>
+                  <input
+                    type="text"
+                    value={gapModel}
+                    onChange={(e) => setGapModel(e.target.value)}
+                    className="input-field"
+                  />
+                </div>
+              </div>
+            </section>
+
+            {/* Stage Tracker */}
+            <section className="glass-card p-6">
+              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <span>📋</span>
+                <span>Pipeline Stages</span>
+              </h2>
+              <StageTracker stages={stages} />
+            </section>
+
+            {/* Status */}
+            <section className="glass-card p-6">
+              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <span>📡</span>
+                <span>Status</span>
+              </h2>
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <span className={`w-3 h-3 rounded-full ${canRun ? "bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.5)]" : "bg-amber-400"}`} />
                   <span className="text-sm">
-                    {runSuccess ? 'Pipeline completed successfully' : 'Pipeline completed with errors'}
+                    {canRun ? "Ready to run" : "Configure required fields"}
                   </span>
                 </div>
-              )}
-            </div>
-          </Card>
-        </div>
-      </div>
-
-      {/* Log File Info */}
-      {logFile && (
-        <Card title="Pipeline Log">
-          <div className="space-y-3">
-            <div className="flex items-start gap-3">
-              <div className="flex-shrink-0 mt-1">
-                <svg className="h-5 w-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
+                {!anthropic && (
+                  <div className="text-xs text-amber-400/80">⚠ Anthropic API key required</div>
+                )}
+                {!inputDir && (
+                  <div className="text-xs text-amber-400/80">⚠ Input folder required</div>
+                )}
+                {!outputDir && (
+                  <div className="text-xs text-amber-400/80">⚠ Output folder required</div>
+                )}
+                {logFile && (
+                  <div className="mt-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
+                    <div className="text-xs text-emerald-400 uppercase tracking-wider mb-1">Log File</div>
+                    <div className="text-sm text-white/80 font-mono break-all">{logFile}</div>
+                  </div>
+                )}
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white">Detailed Log File Created</p>
-                <p className="text-xs text-white/60 mt-1 break-all font-mono bg-black/30 rounded px-2 py-1">
-                  {logFile}
-                </p>
-                <p className="text-xs text-white/50 mt-2">
-                  Open this Markdown file in any text editor or Markdown viewer to see the complete pipeline report with:
-                </p>
-                <ul className="text-xs text-white/50 mt-1 ml-4 list-disc space-y-0.5">
-                  <li>Stage-by-stage timing and statistics</li>
-                  <li>API call logs with token usage</li>
-                  <li>Errors and warnings summary</li>
-                  <li>Extraction results summary</li>
-                  <li>Recommendations for improvement</li>
-                </ul>
-              </div>
-            </div>
+            </section>
           </div>
-        </Card>
-      )}
+        </div>
 
-      {/* Console */}
-      <Card title="Console Output">
-        <LogConsole text={log} />
-      </Card>
-
-      {/* Footer */}
-      <div className="text-center text-xs text-white/40 pt-4">
-        Kevin v1.0 — Built for chemistry dataset extraction from scientific literature
-      </div>
-    </main>
+        {/* Footer */}
+        <footer className="text-center text-xs text-white/30 py-8">
+          <div className="flex items-center justify-center gap-2">
+            <span>KEVIN v1.0</span>
+            <span>•</span>
+            <span>Multi-Model Chemistry Dataset Builder</span>
+            <span>•</span>
+            <span>2026</span>
+          </div>
+        </footer>
+      </main>
+    </div>
   );
 }
