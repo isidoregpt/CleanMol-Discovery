@@ -368,9 +368,21 @@ def normalize_compound_name(name: str) -> str:
     return name
 
 
+def _save_debug_log(bundle_dir, debug_lines: list):
+    """Save debug log to bundle directory."""
+    if bundle_dir:
+        try:
+            debug_path = Path(bundle_dir) / "figure_matching_debug.txt"
+            debug_path.write_text("\n".join(debug_lines), encoding="utf-8")
+            print(f"    [DEBUG] Saved matching debug log to {debug_path}")
+        except Exception as e:
+            print(f"    [DEBUG] Failed to save debug log: {e}")
+
+
 def match_figure_compounds_to_molecules(
     figure_compounds: list,
-    extracted_molecules: list
+    extracted_molecules: list,
+    bundle_dir=None
 ) -> tuple:
     """
     Match figure-extracted SMILES to Opus-extracted molecules by name/code.
@@ -378,22 +390,56 @@ def match_figure_compounds_to_molecules(
     Args:
         figure_compounds: List of compounds from figure extraction
         extracted_molecules: List of molecules from Opus extraction
+        bundle_dir: Optional path to bundle directory for debug log output
 
     Returns:
         Tuple of (updated_molecules, match_count)
     """
+    debug_lines = []
+    debug_lines.append("=" * 80)
+    debug_lines.append("FIGURE-TO-MOLECULE SMILES MATCHING DEBUG LOG")
+    debug_lines.append("=" * 80)
+    debug_lines.append("")
+
+    # Log input counts
+    debug_lines.append(f"INPUT SUMMARY:")
+    debug_lines.append(f"  - Figure compounds received: {len(figure_compounds) if figure_compounds else 0}")
+    debug_lines.append(f"  - Extracted molecules received: {len(extracted_molecules) if extracted_molecules else 0}")
+    debug_lines.append("")
+
     if not figure_compounds or not extracted_molecules:
+        debug_lines.append("EARLY EXIT: Empty input")
+        debug_lines.append(f"  - figure_compounds is {'empty/None' if not figure_compounds else 'valid'}")
+        debug_lines.append(f"  - extracted_molecules is {'empty/None' if not extracted_molecules else 'valid'}")
+        _save_debug_log(bundle_dir, debug_lines)
         return extracted_molecules, 0
 
     matched = 0
+
+    # Log all figure compounds
+    debug_lines.append("FIGURE COMPOUNDS (from Claude Vision):")
+    debug_lines.append("-" * 40)
+    for i, compound in enumerate(figure_compounds):
+        name = compound.get("name", "<NO NAME>")
+        smiles = compound.get("smiles", "<NO SMILES>")
+        confidence = compound.get("confidence", "unknown")
+        valid = compound.get("smiles_valid", "not checked")
+        debug_lines.append(f"  [{i+1}] Name: '{name}'")
+        debug_lines.append(f"       SMILES: {smiles[:80]}{'...' if len(str(smiles)) > 80 else ''}")
+        debug_lines.append(f"       Confidence: {confidence}, Valid: {valid}")
+    debug_lines.append("")
 
     # Build lookup from figure compounds - index by both exact and normalized names
     figure_lookup_exact = {}
     figure_lookup_normalized = {}
 
+    debug_lines.append("BUILDING LOOKUP TABLES:")
+    debug_lines.append("-" * 40)
+
     for compound in figure_compounds:
         # Only require SMILES, not validation (validation may have been skipped)
         if not compound.get("smiles"):
+            debug_lines.append(f"  SKIP (no SMILES): {compound.get('name', '<no name>')}")
             continue
 
         name = compound.get("name") or ""
@@ -402,18 +448,46 @@ def match_figure_compounds_to_molecules(
             exact_key = name.strip().lower()
             if exact_key:
                 figure_lookup_exact[exact_key] = compound
+                debug_lines.append(f"  EXACT KEY: '{exact_key}'")
 
             # Normalized match
             normalized_key = normalize_compound_name(name)
             if normalized_key:
                 figure_lookup_normalized[normalized_key] = compound
+                debug_lines.append(f"  NORMALIZED KEY: '{normalized_key}' (from '{name}')")
+        else:
+            debug_lines.append(f"  SKIP (no name): SMILES={compound.get('smiles', '')[:40]}...")
+
+    debug_lines.append("")
+    debug_lines.append(f"LOOKUP TABLE SUMMARY:")
+    debug_lines.append(f"  - Exact keys: {len(figure_lookup_exact)}")
+    debug_lines.append(f"  - Normalized keys: {len(figure_lookup_normalized)}")
+    debug_lines.append(f"  - Exact keys list: {list(figure_lookup_exact.keys())}")
+    debug_lines.append(f"  - Normalized keys list: {list(figure_lookup_normalized.keys())}")
+    debug_lines.append("")
 
     print(f"    Figure lookup: {len(figure_lookup_exact)} exact keys, {len(figure_lookup_normalized)} normalized keys")
 
+    # Log all extracted molecules and their matching attempts
+    debug_lines.append("MOLECULE MATCHING ATTEMPTS:")
+    debug_lines.append("-" * 40)
+
     # Try to match to extracted molecules
-    for mol in extracted_molecules:
+    for mol_idx, mol in enumerate(extracted_molecules):
+        mol_id = mol.get("molecule_id", "<no id>")
+        name_written = mol.get("name_as_written", "<no name>")
+        norm_name = mol.get("normalized_name", "<no normalized>")
+        existing_smiles = mol.get("smiles")
+
+        debug_lines.append(f"  MOLECULE [{mol_idx+1}]:")
+        debug_lines.append(f"    molecule_id: '{mol_id}'")
+        debug_lines.append(f"    name_as_written: '{name_written}'")
+        debug_lines.append(f"    normalized_name: '{norm_name}'")
+        debug_lines.append(f"    existing_smiles: {existing_smiles[:50] if existing_smiles else 'None'}{'...' if existing_smiles and len(existing_smiles) > 50 else ''}")
+
         # Skip if already has SMILES
         if mol.get("smiles"):
+            debug_lines.append(f"    RESULT: SKIPPED (already has SMILES)")
             continue
 
         # Try molecule_id first (most specific), then other fields
@@ -426,10 +500,14 @@ def match_figure_compounds_to_molecules(
 
             val = mol.get(field)
             if not val:
+                debug_lines.append(f"    TRY {field}: <empty>")
                 continue
 
             # Try exact match first
             exact_key = val.strip().lower()
+            debug_lines.append(f"    TRY {field}: '{val}'")
+            debug_lines.append(f"      exact_key: '{exact_key}' -> {'FOUND' if exact_key in figure_lookup_exact else 'NOT FOUND'}")
+
             if exact_key in figure_lookup_exact:
                 compound = figure_lookup_exact[exact_key]
                 mol["smiles"] = compound["smiles"]
@@ -437,12 +515,15 @@ def match_figure_compounds_to_molecules(
                 mol["smiles_confidence"] = compound.get("confidence", "medium")
                 mol["smiles_valid"] = compound.get("smiles_valid", True)
                 matched += 1
+                debug_lines.append(f"    RESULT: ✓ MATCHED (exact) -> {mol['smiles'][:50]}...")
                 print(f"    ✓ Matched (exact): {val} -> {mol['smiles'][:50]}...")
                 found = True
                 break
 
             # Try normalized match
             normalized_key = normalize_compound_name(val)
+            debug_lines.append(f"      normalized_key: '{normalized_key}' -> {'FOUND' if normalized_key in figure_lookup_normalized else 'NOT FOUND'}")
+
             if normalized_key in figure_lookup_normalized:
                 compound = figure_lookup_normalized[normalized_key]
                 mol["smiles"] = compound["smiles"]
@@ -450,9 +531,22 @@ def match_figure_compounds_to_molecules(
                 mol["smiles_confidence"] = compound.get("confidence", "medium")
                 mol["smiles_valid"] = compound.get("smiles_valid", True)
                 matched += 1
+                debug_lines.append(f"    RESULT: ✓ MATCHED (normalized) -> {mol['smiles'][:50]}...")
                 print(f"    ✓ Matched (normalized): {val} -> {mol['smiles'][:50]}...")
                 found = True
                 break
 
+        if not found:
+            debug_lines.append(f"    RESULT: ✗ NO MATCH")
+
+    debug_lines.append("")
+    debug_lines.append("=" * 80)
+    debug_lines.append(f"FINAL RESULT: {matched} molecules matched with figure-derived SMILES")
+    debug_lines.append("=" * 80)
+
     print(f"    Total matched: {matched} molecules with figure-derived SMILES")
+
+    # Save debug log
+    _save_debug_log(bundle_dir, debug_lines)
+
     return extracted_molecules, matched

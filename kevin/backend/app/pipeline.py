@@ -277,11 +277,20 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
 
             # Match figure-extracted SMILES to Opus-extracted molecules
             if figure_compounds:
+                opus_molecules = extraction.get("molecules") or []
+                print(f"  [DEBUG] Figure matching input:")
+                print(f"    - Figure compounds: {len(figure_compounds)}")
+                print(f"    - Opus molecules: {len(opus_molecules)}")
+                print(f"    - Figure compound names: {[c.get('name', '<no name>') for c in figure_compounds[:5]]}{'...' if len(figure_compounds) > 5 else ''}")
+                print(f"    - Opus molecule IDs: {[m.get('molecule_id', '<no id>') for m in opus_molecules[:5]]}{'...' if len(opus_molecules) > 5 else ''}")
+
                 molecules, matched_count = match_figure_compounds_to_molecules(
                     figure_compounds,
-                    extraction.get("molecules") or []
+                    opus_molecules,
+                    bundle_dir=bundle_dir
                 )
                 extraction["molecules"] = molecules
+                print(f"  [DEBUG] Figure matching result: {matched_count} matches")
                 if matched_count > 0:
                     print(f"  Matched {matched_count} figure-derived SMILES to molecules")
 
