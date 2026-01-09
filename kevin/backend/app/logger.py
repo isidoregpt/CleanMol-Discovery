@@ -2,14 +2,14 @@ import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 import json
 
 
 class PipelineLogger:
     """Comprehensive logging system for Kevin pipeline runs."""
 
-    def __init__(self, output_dir: str, config: Dict[str, Any]):
+    def __init__(self, output_dir: str, config: Dict[str, Any], progress_callback: Callable[[str], None] = None):
         self.output_dir = Path(output_dir)
         self.logs_dir = self.output_dir / "logs"
         self.logs_dir.mkdir(parents=True, exist_ok=True)
@@ -33,6 +33,9 @@ class PipelineLogger:
         # Database stats
         self.db_stats: Dict[str, int] = {}
 
+        # Progress callback for streaming updates
+        self.progress_callback = progress_callback
+
         # Generate log filename
         timestamp = self.started_at.strftime("%Y-%m-%d_%H-%M-%S")
         self.log_filename = f"kevin_run_{timestamp}.md"
@@ -43,6 +46,31 @@ class PipelineLogger:
 
     def _timestamp(self) -> str:
         return datetime.now(timezone.utc).strftime("%H:%M:%S")
+
+    def _emit(self, message: str):
+        """Emit a progress message to the callback if set."""
+        if self.progress_callback:
+            try:
+                self.progress_callback(message)
+            except Exception:
+                pass
+
+    def emit_progress(self, stage: str, event: str, doc_index: int = 0, doc_total: int = 0, stats: dict = None):
+        """Emit structured progress for frontend weighted progress bar."""
+        if self.progress_callback:
+            payload = {
+                "type": "stage_progress",
+                "stage": stage,
+                "event": event,  # "start" or "end"
+                "doc_index": doc_index,
+                "doc_total": doc_total,
+            }
+            if stats:
+                payload["stats"] = stats
+            try:
+                self.progress_callback(json.dumps(payload))
+            except Exception:
+                pass
 
     def start_document(self, filename: str, doc_id: str, path: str):
         """Start logging a new document."""
@@ -58,6 +86,7 @@ class PipelineLogger:
             "errors": [],
             "warnings": []
         }
+        self._emit(f"Starting document: {filename}")
 
     def set_document_pages(self, pages: int):
         """Set the page count for current document."""
@@ -69,14 +98,18 @@ class PipelineLogger:
         if self.current_doc:
             self.current_doc["status"] = status
             self.current_doc["finished_at"] = self._utc_iso()
+            filename = self.current_doc.get("filename", "unknown")
             self.documents.append(self.current_doc)
             self.current_doc = None
+            self._emit(f"Document {filename} completed with status: {status}")
 
     def log_stage(self, stage_name: str, data: Dict[str, Any]):
         """Log a pipeline stage for the current document."""
         if self.current_doc:
             data["timestamp"] = self._utc_iso()
             self.current_doc["stages"][stage_name] = data
+        status = data.get("status", "unknown")
+        self._emit(f"[{stage_name}] {status}")
 
     def log_error(self, message: str, stage: str = "", doc_id: str = "", exception: Optional[Exception] = None):
         """Log an error."""
@@ -90,6 +123,7 @@ class PipelineLogger:
         self.errors.append(error)
         if self.current_doc:
             self.current_doc["errors"].append(error)
+        self._emit(f"ERROR [{stage}]: {message}")
 
     def log_warning(self, message: str, stage: str = "", doc_id: str = ""):
         """Log a warning."""
@@ -102,6 +136,7 @@ class PipelineLogger:
         self.warnings.append(warning)
         if self.current_doc:
             self.current_doc["warnings"].append(warning)
+        self._emit(f"WARNING [{stage}]: {message}")
 
     def log_api_call(self, provider: str, model: str, endpoint: str,
                      tokens_in: int, tokens_out: int, duration_sec: float,
@@ -117,6 +152,7 @@ class PipelineLogger:
             "duration_sec": round(duration_sec, 2),
             "status": status
         })
+        self._emit(f"API: {provider} {model} ({tokens_in}→{tokens_out} tokens, {duration_sec:.1f}s)")
 
     def set_db_stats(self, stats: Dict[str, int]):
         """Set database statistics."""
