@@ -346,6 +346,28 @@ def analyze_pdf_figures(
     return {"compounds": all_compounds, "stats": stats}
 
 
+def normalize_compound_name(name: str) -> str:
+    """
+    Normalize compound name for fuzzy matching.
+    Removes common variations that differ between figure labels and text.
+    """
+    if not name:
+        return ""
+    # Lowercase
+    name = name.lower()
+    # Remove common separators and variations
+    name = name.replace(",", "")      # MeP2P-12,12 → MeP2P-1212
+    name = name.replace("-", "")      # MeP2P-12-12 → MeP2P1212
+    name = name.replace(" ", "")
+    name = name.replace("_", "")
+    name = name.replace(".", "")
+    # Remove parentheses but keep content: 12(2)12 → 12212
+    name = name.replace("(", "").replace(")", "")
+    # Remove quotes
+    name = name.replace("'", "").replace('"', "")
+    return name
+
+
 def match_figure_compounds_to_molecules(
     figure_compounds: list,
     extracted_molecules: list
@@ -365,15 +387,28 @@ def match_figure_compounds_to_molecules(
 
     matched = 0
 
-    # Build lookup from figure compounds
-    figure_lookup = {}
+    # Build lookup from figure compounds - index by both exact and normalized names
+    figure_lookup_exact = {}
+    figure_lookup_normalized = {}
+
     for compound in figure_compounds:
-        if compound.get("smiles") and compound.get("smiles_valid"):
-            name = compound.get("name") or ""
-            if name:
-                name = name.strip().lower()
-                if name:
-                    figure_lookup[name] = compound
+        # Only require SMILES, not validation (validation may have been skipped)
+        if not compound.get("smiles"):
+            continue
+
+        name = compound.get("name") or ""
+        if name:
+            # Exact lowercase match
+            exact_key = name.strip().lower()
+            if exact_key:
+                figure_lookup_exact[exact_key] = compound
+
+            # Normalized match
+            normalized_key = normalize_compound_name(name)
+            if normalized_key:
+                figure_lookup_normalized[normalized_key] = compound
+
+    print(f"    Figure lookup: {len(figure_lookup_exact)} exact keys, {len(figure_lookup_normalized)} normalized keys")
 
     # Try to match to extracted molecules
     for mol in extracted_molecules:
@@ -381,22 +416,43 @@ def match_figure_compounds_to_molecules(
         if mol.get("smiles"):
             continue
 
-        # Try to match by various name fields (with null safety)
-        names_to_try = []
-        for field in ["name_as_written", "normalized_name", "molecule_id"]:
-            val = mol.get(field)
-            if val:
-                names_to_try.append(val.strip().lower())
+        # Try molecule_id first (most specific), then other fields
+        fields_to_try = ["molecule_id", "name_as_written", "normalized_name"]
+        found = False
 
-        for name in names_to_try:
-            if name and name in figure_lookup:
-                compound = figure_lookup[name]
-                mol["smiles"] = compound["smiles"]
-                mol["smiles_source"] = compound["source"]
-                mol["smiles_confidence"] = compound.get("confidence", "medium")
-                mol["smiles_valid"] = True
-                matched += 1
-                print(f"    Matched figure SMILES: {name} -> {mol['smiles'][:40]}...")
+        for field in fields_to_try:
+            if found:
                 break
 
+            val = mol.get(field)
+            if not val:
+                continue
+
+            # Try exact match first
+            exact_key = val.strip().lower()
+            if exact_key in figure_lookup_exact:
+                compound = figure_lookup_exact[exact_key]
+                mol["smiles"] = compound["smiles"]
+                mol["smiles_source"] = compound.get("source", "figure_extraction")
+                mol["smiles_confidence"] = compound.get("confidence", "medium")
+                mol["smiles_valid"] = compound.get("smiles_valid", True)
+                matched += 1
+                print(f"    ✓ Matched (exact): {val} -> {mol['smiles'][:50]}...")
+                found = True
+                break
+
+            # Try normalized match
+            normalized_key = normalize_compound_name(val)
+            if normalized_key in figure_lookup_normalized:
+                compound = figure_lookup_normalized[normalized_key]
+                mol["smiles"] = compound["smiles"]
+                mol["smiles_source"] = compound.get("source", "figure_extraction")
+                mol["smiles_confidence"] = compound.get("confidence", "medium")
+                mol["smiles_valid"] = compound.get("smiles_valid", True)
+                matched += 1
+                print(f"    ✓ Matched (normalized): {val} -> {mol['smiles'][:50]}...")
+                found = True
+                break
+
+    print(f"    Total matched: {matched} molecules with figure-derived SMILES")
     return extracted_molecules, matched
