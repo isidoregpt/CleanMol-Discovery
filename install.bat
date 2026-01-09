@@ -8,6 +8,9 @@ echo    Full Installation Script for Windows
 echo ============================================================
 echo.
 
+:: Store the root directory FIRST
+set ROOT_DIR=%cd%
+
 :: Check for Python
 echo [1/8] Checking for Python...
 python --version >nul 2>&1
@@ -18,11 +21,10 @@ if %errorlevel% neq 0 (
     pause
     exit /b 1
 )
-for /f "tokens=2" %%i in ('python --version 2^>^&1') do set PYTHON_VERSION=%%i
-echo Found Python %PYTHON_VERSION%
+python --version
+echo.
 
 :: Check for Node.js
-echo.
 echo [2/8] Checking for Node.js...
 node --version >nul 2>&1
 if %errorlevel% neq 0 (
@@ -31,29 +33,30 @@ if %errorlevel% neq 0 (
     pause
     exit /b 1
 )
-for /f "tokens=1" %%i in ('node --version 2^>^&1') do set NODE_VERSION=%%i
-echo Found Node.js %NODE_VERSION%
-
-:: Check for npm
+node --version
 echo.
+
+:: Check for npm (simplified - just check it exists, don't capture version)
 echo [3/8] Checking for npm...
-npm --version >nul 2>&1
+where npm >nul 2>&1
 if %errorlevel% neq 0 (
     echo ERROR: npm is not installed or not in PATH.
     echo npm should come with Node.js installation.
     pause
     exit /b 1
 )
-for /f "tokens=1" %%i in ('npm --version 2^>^&1') do set NPM_VERSION=%%i
-echo Found npm %NPM_VERSION%
-
-:: Store the root directory
-set ROOT_DIR=%cd%
+echo npm found.
+echo.
 
 :: Create backend virtual environment
-echo.
 echo [4/8] Creating Python virtual environment for backend...
-cd "%ROOT_DIR%\kevin\backend"
+cd /d "%ROOT_DIR%\kevin\backend"
+if %errorlevel% neq 0 (
+    echo ERROR: Cannot find kevin\backend folder.
+    echo Make sure you're running this from the repository root.
+    pause
+    exit /b 1
+)
 if exist .venv (
     echo Virtual environment already exists, removing old one...
     rmdir /s /q .venv
@@ -65,12 +68,12 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 echo Virtual environment created successfully.
+echo.
 
 :: Activate virtual environment and install Python dependencies
-echo.
 echo [5/8] Installing Python dependencies...
 call .venv\Scripts\activate.bat
-python -m pip install --upgrade pip >nul 2>&1
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 if %errorlevel% neq 0 (
     echo ERROR: Failed to install Python dependencies.
@@ -79,15 +82,21 @@ if %errorlevel% neq 0 (
 )
 echo Python dependencies installed successfully.
 call deactivate
+echo.
 
 :: Install frontend dependencies
-echo.
 echo [6/8] Installing Node.js dependencies for frontend...
-cd "%ROOT_DIR%\kevin\frontend"
+cd /d "%ROOT_DIR%\kevin\frontend"
+if %errorlevel% neq 0 (
+    echo ERROR: Cannot find kevin\frontend folder.
+    pause
+    exit /b 1
+)
 if exist node_modules (
     echo node_modules already exists, removing old one...
     rmdir /s /q node_modules
 )
+echo Running npm install (this may take a minute)...
 call npm install
 if %errorlevel% neq 0 (
     echo ERROR: Failed to install Node.js dependencies.
@@ -95,21 +104,21 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 echo Node.js dependencies installed successfully.
+echo.
 
 :: Create data directories
-echo.
 echo [7/8] Creating default data directories...
 if not exist "%USERPROFILE%\Kevin\input" mkdir "%USERPROFILE%\Kevin\input"
 if not exist "%USERPROFILE%\Kevin\output" mkdir "%USERPROFILE%\Kevin\output"
 echo Created directories:
 echo   - %USERPROFILE%\Kevin\input  (place your PDFs here)
 echo   - %USERPROFILE%\Kevin\output (dataset will be saved here)
+echo.
 
 :: Return to root
-cd "%ROOT_DIR%"
+cd /d "%ROOT_DIR%"
 
 :: Final summary
-echo.
 echo [8/8] Installation complete!
 echo.
 echo ============================================================
