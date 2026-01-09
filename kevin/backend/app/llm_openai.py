@@ -21,15 +21,15 @@ def call_openai_responses(*, api_key: str, model: str, instructions: str, input_
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
     messages = [
-        {"role": "system", "content": instructions},
+        {"role": "developer", "content": instructions},
         {"role": "user", "content": input_text}
     ]
 
     payload = {
         "model": model,
         "messages": messages,
-        "max_tokens": max_output_tokens,
-        "temperature": 0.2,
+        "max_completion_tokens": max_output_tokens,
+        "reasoning_effort": reasoning_effort,
     }
 
     start_time = time.time()
