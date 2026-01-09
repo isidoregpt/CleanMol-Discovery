@@ -534,6 +534,11 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
             "output_file": str(combined_excel_path)
         })
 
+    # Compute total counts from all extractions
+    total_molecules = sum(len(ext["extraction"].get("molecules") or []) for ext in all_extractions)
+    total_experiments = sum(len(ext["extraction"].get("experiments") or []) for ext in all_extractions)
+    total_results = sum(len(ext["extraction"].get("results") or []) for ext in all_extractions)
+
     status = "ok" if not errors else "failed"
     run_row = {
         "run_id": run_id,
@@ -558,5 +563,8 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
         "documents_processed": processed,
         "errors": errors,
         "log_file": log_file,
-        "combined_excel": str(combined_excel_path) if combined_excel_path else None
+        "combined_excel": str(combined_excel_path) if combined_excel_path else None,
+        "total_molecules": total_molecules,
+        "total_experiments": total_experiments,
+        "total_results": total_results
     }
