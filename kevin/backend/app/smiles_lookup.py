@@ -131,7 +131,7 @@ def enrich_molecules_with_smiles(molecules: list, logger=None, delay: float = 0.
     Enrich a list of molecule dicts with SMILES strings.
 
     Modifies molecules in place and returns the list.
-    Also prints stats for visibility.
+    Skips molecules that already have SMILES (e.g., from figure extraction).
     """
     total = len(molecules)
     pre_existing = 0
@@ -141,16 +141,33 @@ def enrich_molecules_with_smiles(molecules: list, logger=None, delay: float = 0.
 
     print(f"[SMILES] Starting enrichment for {total} molecules...")
 
+    # DEBUG: Show which molecules already have SMILES at the start
+    with_smiles_at_start = [
+        (m.get("molecule_id", "?"), m.get("smiles_source", "unknown"))
+        for m in molecules if m.get("smiles")
+    ]
+    print(f"  [DEBUG] Molecules with SMILES at start: {len(with_smiles_at_start)}")
+    for mol_id, source in with_smiles_at_start:
+        print(f"    - {mol_id}: source='{source}'")
+
     for i, mol in enumerate(molecules):
-        # Skip if already has SMILES (from figure extraction or other source)
-        if mol.get("smiles"):
+        mol_id = mol.get("molecule_id", "unknown")
+
+        # ===== CHECK IF ALREADY HAS SMILES FIRST =====
+        existing_smiles = mol.get("smiles")
+        if existing_smiles:
             source = mol.get("smiles_source", "")
-            if source and source.startswith("figure"):
+
+            # Check for figure-derived (case-insensitive, contains "figure")
+            if source and "figure" in source.lower():
                 figure_derived += 1
-                print(f"  [{i+1}/{total}] Skipping (figure-derived): {mol.get('name_as_written', mol.get('molecule_id', 'unknown'))}")
+                print(f"  [{i+1}/{total}] {mol_id}: SKIP (figure-derived, source='{source}')")
             else:
                 pre_existing += 1
-            continue
+                print(f"  [{i+1}/{total}] {mol_id}: SKIP (pre-existing, source='{source}')")
+
+            continue  # CRITICAL: Skip to next molecule, don't look up!
+        # =============================================
 
         # Get name to look up
         name = mol.get("normalized_name") or mol.get("name_as_written")
@@ -174,8 +191,8 @@ def enrich_molecules_with_smiles(molecules: list, logger=None, delay: float = 0.
         else:
             print(f"    ✗ Not found in any database")
 
-        # Rate limit between molecules
-        if i < total - 1:
+        # Rate limit between lookups (only when we actually make API calls)
+        if i < total - 1 and looked_up > 0:
             time.sleep(delay)
 
     with_smiles = pre_existing + figure_derived + newly_found
@@ -183,6 +200,7 @@ def enrich_molecules_with_smiles(molecules: list, logger=None, delay: float = 0.
 
     if logger:
         logger.log_stage("SMILES Enrichment", {
+            "status": "success",
             "total_molecules": total,
             "with_smiles": with_smiles,
             "figure_derived": figure_derived,
