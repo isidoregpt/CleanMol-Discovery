@@ -264,6 +264,7 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
                 gaps_json = run_gap_hunter(
                     gemini_key=gemini_key, model=gap_model,
                     paper_md=paper_md, extraction=extraction,
+                    bundle_dir=bundle_dir,
                     logger=logger
                 )
                 gap_meta = gaps_json.pop("_meta", {})
@@ -359,6 +360,7 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
                         gaps_json = run_gap_hunter(
                             gemini_key=gemini_key, model=gap_model,
                             paper_md=paper_md, extraction=extraction,
+                            bundle_dir=bundle_dir,
                             logger=logger
                         )
                         gaps_json.pop("_meta", None)

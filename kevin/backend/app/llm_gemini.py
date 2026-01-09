@@ -1,10 +1,18 @@
 import requests
 import time
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional
 
 
-def call_gemini_generate_content(*, api_key: str, model: str, prompt: str,
-                                 max_output_tokens: int = 4096, temperature: float = 0.2) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+def call_gemini_generate_content(
+    *,
+    api_key: str,
+    model: str,
+    prompt: str,
+    max_output_tokens: int = 4096,
+    temperature: float = 0.2,
+    response_mime_type: Optional[str] = None,
+    timeout_sec: int = 300,
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """
     Call Gemini generateContent API.
 
@@ -18,13 +26,21 @@ def call_gemini_generate_content(*, api_key: str, model: str, prompt: str,
     """
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     headers = {"x-goog-api-key": api_key, "Content-Type": "application/json"}
-    payload = {
+
+    generation_config: Dict[str, Any] = {
+        "temperature": temperature,
+        "maxOutputTokens": max_output_tokens,
+    }
+    if response_mime_type:
+        generation_config["responseMimeType"] = response_mime_type
+
+    payload: Dict[str, Any] = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": temperature, "maxOutputTokens": max_output_tokens},
+        "generationConfig": generation_config,
     }
 
     start_time = time.time()
-    r = requests.post(url, headers=headers, json=payload, timeout=300)
+    r = requests.post(url, headers=headers, json=payload, timeout=timeout_sec)
     duration = time.time() - start_time
 
     r.raise_for_status()
@@ -49,4 +65,4 @@ def extract_text(resp: Dict[str, Any]) -> str:
     if not cands:
         return ""
     parts = ((cands[0].get("content") or {}).get("parts")) or []
-    return "".join([p.get("text", "") for p in parts if "text" in p]).strip()
+    return "".join([p.get("text", "") for p in parts if isinstance(p, dict) and "text" in p]).strip()
