@@ -10,6 +10,27 @@ from .prompts_targeted import TARGETED_SYSTEM, TARGETED_USER_TEMPLATE
 from .logger import PipelineLogger
 
 
+def _ensure_experiment_exists(extraction: dict, experiment_id: str) -> dict:
+    """Ensure an experiment exists, create placeholder if not."""
+    if not experiment_id:
+        return extraction
+    existing_ids = {e.get("experiment_id") for e in (extraction.get("experiments") or [])}
+    if experiment_id not in existing_ids:
+        placeholder = {
+            "experiment_id": experiment_id,
+            "organism": None,
+            "strain": None,
+            "assay_type": "unknown",
+            "conditions": None,
+            "exposure_protocol": None,
+            "evidence": {"kind": "snippet", "page": 1, "snippet": "Auto-generated placeholder for gap resolution"}
+        }
+        if "experiments" not in extraction:
+            extraction["experiments"] = []
+        extraction["experiments"].append(placeholder)
+    return extraction
+
+
 def _dedupe_by_id(items: List[dict], key: str) -> List[dict]:
     seen = set()
     out = []
@@ -27,6 +48,12 @@ def _dedupe_by_id(items: List[dict], key: str) -> List[dict]:
 
 def merge_additions(extraction: dict, additions: dict) -> dict:
     merged = dict(extraction)
+
+    # Ensure experiments exist for all results before merging
+    for res in (additions.get("results") or []):
+        exp_id = res.get("experiment_id")
+        if exp_id:
+            merged = _ensure_experiment_exists(merged, exp_id)
 
     merged_mols = (merged.get("molecules") or []) + (additions.get("molecules") or [])
     merged_exps = (merged.get("experiments") or []) + (additions.get("experiments") or [])
