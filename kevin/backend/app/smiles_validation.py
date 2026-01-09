@@ -34,8 +34,22 @@ def validate_and_enrich_smiles(molecules: list, compute_properties: bool = True)
     try:
         from rdkit import Chem
         from rdkit.Chem import Descriptors, rdMolDescriptors
-    except ImportError:
-        print("[VALIDATE] Warning: RDKit not installed, skipping validation")
+        rdkit_available = True
+    except ImportError as e:
+        print(f"[VALIDATE] Warning: RDKit not available ({e}), marking SMILES as validation_skipped")
+        rdkit_available = False
+
+    # If RDKit not available, mark all molecules with SMILES as skipped but assume valid
+    if not rdkit_available:
+        for mol in molecules:
+            smiles = mol.get("smiles")
+            if smiles:
+                stats["with_smiles"] += 1
+                if mol.get("smiles_valid") is None:
+                    mol["smiles_valid"] = True  # Assume valid since we can't check
+                    mol["validation_skipped"] = True
+                stats["valid_smiles"] += 1
+        print(f"[VALIDATE] Complete (skipped): {stats['with_smiles']} molecules with SMILES, validation skipped")
         return stats
 
     for mol in molecules:
