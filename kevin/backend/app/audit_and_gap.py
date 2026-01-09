@@ -23,7 +23,7 @@ def _batch_items(items: List, batch_size: int) -> List[List]:
     """Split items into batches."""
     return [items[i:i + batch_size] for i in range(0, len(items), batch_size)]
 
-def _run_single_audit_batch(*, openai_key: str, model: str, paper_md: str, batch: List[Dict]) -> Dict:
+def _run_single_audit_batch(*, openai_key: str, model: str, paper_md: str, batch: List[Dict], logger=None) -> Dict:
     """Run audit on a single batch of items."""
     batch_extraction = {"molecules": [], "experiments": [], "results": []}
     for item in batch:
@@ -46,7 +46,7 @@ def _run_single_audit_batch(*, openai_key: str, model: str, paper_md: str, batch
     out = extract_output_text(resp)
     return parse_json_strict(out)
 
-def run_auditor(*, openai_key: str, model: str, paper_md: str, extraction: dict) -> dict:
+def run_auditor(*, openai_key: str, model: str, paper_md: str, extraction: dict, logger=None) -> dict:
     """Run audit in batches to avoid token limits."""
     molecules = extraction.get("molecules") or []
     experiments = extraction.get("experiments") or []
@@ -72,7 +72,7 @@ def run_auditor(*, openai_key: str, model: str, paper_md: str, extraction: dict)
     for batch in batches:
         try:
             batch_result = _run_single_audit_batch(
-                openai_key=openai_key, model=model, paper_md=paper_md, batch=batch
+                openai_key=openai_key, model=model, paper_md=paper_md, batch=batch, logger=logger
             )
             all_audits.extend(batch_result.get("audits") or [])
         except Exception as e:
