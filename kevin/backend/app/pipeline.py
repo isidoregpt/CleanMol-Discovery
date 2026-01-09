@@ -27,21 +27,33 @@ def _write_bundle_file(bundle_dir: Path, name: str, obj: dict):
 
 
 def _upsert_extraction_into_db(conn, doc_id: str, extraction: dict):
+    # Insert molecules first
     for mol in extraction.get("molecules", []) or []:
         if mol.get("evidence"):
             insert_evidence(conn, doc_id, mol["evidence"])
         insert_molecule(conn, doc_id, mol)
 
+    # Insert experiments second - build set of valid experiment_ids
+    valid_experiment_ids = set()
     for exp in extraction.get("experiments", []) or []:
         if exp.get("evidence"):
             insert_evidence(conn, doc_id, exp["evidence"])
         insert_experiment(conn, doc_id, exp)
+        if exp.get("experiment_id"):
+            valid_experiment_ids.add(exp["experiment_id"])
 
+    # Insert results last - ensure experiment_id references exist
     for res in extraction.get("results", []) or []:
         if res.get("evidence"):
             insert_evidence(conn, doc_id, res["evidence"])
-        if not res.get("experiment_id"):
-            res["experiment_id"] = "unknown"
+
+        exp_id = res.get("experiment_id")
+        # Skip results with invalid experiment references
+        if exp_id and exp_id not in valid_experiment_ids:
+            continue
+        if not exp_id:
+            continue  # Skip results without experiment_id
+
         insert_result(conn, doc_id, res)
 
 
