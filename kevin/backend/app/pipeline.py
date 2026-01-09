@@ -15,6 +15,8 @@ from .audit_and_gap import run_auditor, run_gap_hunter
 from .auto_repair import auto_repair
 from .gap_resolve import resolve_gaps_with_targeted_opus
 from .export_jsonl import export_jsonl
+from .smiles_lookup import enrich_molecules_with_smiles
+from .excel_export import create_review_workbook, export_combined_workbook
 from .logger import PipelineLogger
 
 
@@ -143,6 +145,7 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
     max_gap_rounds = int(options.get("max_gap_rounds", 2))
     errors = []
     processed = []
+    all_extractions = []  # Collect for combined Excel export
 
     pdfs = sorted([p for p in input_path.glob("*.pdf") if p.is_file()])
     doc_total = len(pdfs)
@@ -428,7 +431,32 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
                         gaps_json.pop("_meta", None)
                         _write_bundle_file(bundle_dir, f"gaps_after_round_{round_i+1}.json", gaps_json)
 
-            # Stage 8: Export
+            # Stage 8: SMILES Lookup
+            logger.emit_progress("SMILES", "start", doc_index=doc_index, doc_total=doc_total)
+            stage_start = time.time()
+            molecules = extraction.get("molecules") or []
+            smiles_before = sum(1 for m in molecules if m.get("smiles"))
+
+            if molecules:
+                enrich_molecules_with_smiles(molecules, logger=logger, delay=0.2)
+
+            smiles_after = sum(1 for m in molecules if m.get("smiles"))
+            smiles_found = smiles_after - smiles_before
+            stage_time = time.time() - stage_start
+
+            logger.log_stage("Stage 8: SMILES Lookup", {
+                "status": "success",
+                "time": stage_time,
+                "molecules_processed": len(molecules),
+                "smiles_found": smiles_found,
+                "smiles_coverage": f"{smiles_after}/{len(molecules)}"
+            })
+            logger.emit_progress("SMILES", "end", doc_index=doc_index, doc_total=doc_total,
+                                stats={"found": smiles_found, "total": len(molecules)})
+
+            _write_bundle_file(bundle_dir, "extraction_with_smiles.json", extraction)
+
+            # Stage 9: Export
             logger.emit_progress("EXPORT", "start", doc_index=doc_index, doc_total=doc_total)
             stage_start = time.time()
             mol_count = len(extraction.get("molecules") or [])
@@ -437,22 +465,30 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
 
             if extraction.get("molecules") or extraction.get("experiments") or extraction.get("results"):
                 export_jsonl(out, doc_id, extraction)
+
+                # Create per-document Excel workbook
+                paper_title = meta.get("title") or pdf.stem
+                wb = create_review_workbook(extraction, paper_title=paper_title)
+                excel_path = bundle_dir / f"{doc_id}_review.xlsx"
+                wb.save(excel_path)
+
                 stage_time = time.time() - stage_start
 
-                logger.log_stage("Stage 8: Export", {
+                logger.log_stage("Stage 9: Export", {
                     "status": "success",
                     "time": stage_time,
                     "files_created": {
                         f"{doc_id}_molecules.jsonl": f"{mol_count} records",
                         f"{doc_id}_experiments.jsonl": f"{exp_count} records",
                         f"{doc_id}_results.jsonl": f"{res_count} records",
-                        f"{doc_id}_dataset.jsonl": f"{mol_count + exp_count + res_count} records"
+                        f"{doc_id}_dataset.jsonl": f"{mol_count + exp_count + res_count} records",
+                        f"{doc_id}_review.xlsx": "Excel workbook"
                     }
                 })
                 logger.emit_progress("EXPORT", "end", doc_index=doc_index, doc_total=doc_total)
             else:
                 logger.log_warning(f"Skipping export for {doc_id}: no data in extraction", stage="Export")
-                logger.log_stage("Stage 8: Export", {
+                logger.log_stage("Stage 9: Export", {
                     "status": "skipped",
                     "reason": "No data in extraction"
                 })
@@ -466,6 +502,14 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
                 doc_id
             )
 
+            # Collect for combined export
+            paper_title = meta.get("title") or pdf.stem
+            all_extractions.append({
+                "extraction": extraction,
+                "paper_title": paper_title,
+                "doc_id": doc_id
+            })
+
             processed.append(doc_id)
             logger.end_document("success")
 
@@ -478,6 +522,17 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
     # Get database stats
     db_stats = _get_db_stats(conn)
     logger.set_db_stats(db_stats)
+
+    # Create combined Excel workbook if we have extractions
+    combined_excel_path = None
+    if all_extractions:
+        combined_excel_path = out / "combined_dataset.xlsx"
+        export_combined_workbook(all_extractions, combined_excel_path, logger=logger)
+        logger.log_stage("Combined Export", {
+            "status": "success",
+            "papers_combined": len(all_extractions),
+            "output_file": str(combined_excel_path)
+        })
 
     status = "ok" if not errors else "failed"
     run_row = {
@@ -502,5 +557,6 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
         "run": run_row,
         "documents_processed": processed,
         "errors": errors,
-        "log_file": log_file
+        "log_file": log_file,
+        "combined_excel": str(combined_excel_path) if combined_excel_path else None
     }

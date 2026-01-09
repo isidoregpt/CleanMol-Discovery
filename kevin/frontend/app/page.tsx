@@ -22,21 +22,23 @@ const PIPELINE_STAGES = [
   { id: "repair", name: "Auto-Repair", icon: "🔧" },
   { id: "gap", name: "Gemini Gap Hunt", icon: "🎯" },
   { id: "resolve", name: "Gap Resolution", icon: "✨" },
+  { id: "smiles", name: "SMILES Lookup", icon: "🔬" },
   { id: "export", name: "Export Dataset", icon: "💾" },
 ];
 
 // Stage weights for weighted progress calculation
 const STAGE_WEIGHTS: Record<string, number> = {
   PDF: 10,
-  OPUS: 30,
-  AUDIT: 20,
+  OPUS: 28,
+  AUDIT: 18,
   REPAIR: 5,
-  GAP: 15,
-  RESOLVE: 15,
+  GAP: 14,
+  RESOLVE: 14,
+  SMILES: 6,
   EXPORT: 5,
 };
 
-const STAGE_ORDER = ["PDF", "OPUS", "AUDIT", "REPAIR", "GAP", "RESOLVE", "EXPORT"];
+const STAGE_ORDER = ["PDF", "OPUS", "AUDIT", "REPAIR", "GAP", "RESOLVE", "SMILES", "EXPORT"];
 
 // Creep function: starts fast, slows down, never reaches cap
 function creepProgress(elapsedMs: number, cap = 0.92, speed = 0.0003): number {
@@ -191,6 +193,7 @@ export default function Page() {
     REPAIR: "repair",
     GAP: "gap",
     RESOLVE: "resolve",
+    SMILES: "smiles",
     EXPORT: "export",
   };
 
