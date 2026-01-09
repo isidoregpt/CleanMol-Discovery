@@ -17,28 +17,32 @@ const LS = {
 
 const PIPELINE_STAGES = [
   { id: "pdf", name: "PDF Extraction", icon: "📄" },
+  { id: "figure", name: "Figure Analysis", icon: "🖼️" },
   { id: "opus", name: "Opus Extraction", icon: "🧬" },
   { id: "audit", name: "GPT-5.2 Audit", icon: "🔍" },
   { id: "repair", name: "Auto-Repair", icon: "🔧" },
   { id: "gap", name: "Gemini Gap Hunt", icon: "🎯" },
   { id: "resolve", name: "Gap Resolution", icon: "✨" },
   { id: "smiles", name: "SMILES Lookup", icon: "🔬" },
+  { id: "validate", name: "SMILES Validation", icon: "✓" },
   { id: "export", name: "Export Dataset", icon: "💾" },
 ];
 
 // Stage weights for weighted progress calculation
 const STAGE_WEIGHTS: Record<string, number> = {
-  PDF: 10,
-  OPUS: 28,
-  AUDIT: 18,
-  REPAIR: 5,
-  GAP: 14,
-  RESOLVE: 14,
+  PDF: 8,
+  FIGURE: 15,
+  OPUS: 22,
+  AUDIT: 14,
+  REPAIR: 4,
+  GAP: 10,
+  RESOLVE: 10,
   SMILES: 6,
+  VALIDATE: 6,
   EXPORT: 5,
 };
 
-const STAGE_ORDER = ["PDF", "OPUS", "AUDIT", "REPAIR", "GAP", "RESOLVE", "SMILES", "EXPORT"];
+const STAGE_ORDER = ["PDF", "FIGURE", "OPUS", "AUDIT", "REPAIR", "GAP", "RESOLVE", "SMILES", "VALIDATE", "EXPORT"];
 
 // Creep function: starts fast, slows down, never reaches cap
 function creepProgress(elapsedMs: number, cap = 0.92, speed = 0.0003): number {
@@ -188,12 +192,14 @@ export default function Page() {
   // Map backend stage names to frontend stage IDs
   const stageToId: Record<string, string> = {
     PDF: "pdf",
+    FIGURE: "figure",
     OPUS: "opus",
     AUDIT: "audit",
     REPAIR: "repair",
     GAP: "gap",
     RESOLVE: "resolve",
     SMILES: "smiles",
+    VALIDATE: "validate",
     EXPORT: "export",
   };
 

@@ -135,15 +135,21 @@ def enrich_molecules_with_smiles(molecules: list, logger=None, delay: float = 0.
     """
     total = len(molecules)
     pre_existing = 0
+    figure_derived = 0
     newly_found = 0
     looked_up = 0
 
     print(f"[SMILES] Starting enrichment for {total} molecules...")
 
     for i, mol in enumerate(molecules):
-        # Skip if already has SMILES
+        # Skip if already has SMILES (from figure extraction or other source)
         if mol.get("smiles"):
-            pre_existing += 1
+            source = mol.get("smiles_source", "")
+            if source and source.startswith("figure"):
+                figure_derived += 1
+                print(f"  [{i+1}/{total}] Skipping (figure-derived): {mol.get('name_as_written', mol.get('molecule_id', 'unknown'))}")
+            else:
+                pre_existing += 1
             continue
 
         # Get name to look up
@@ -172,13 +178,14 @@ def enrich_molecules_with_smiles(molecules: list, logger=None, delay: float = 0.
         if i < total - 1:
             time.sleep(delay)
 
-    with_smiles = pre_existing + newly_found
-    print(f"[SMILES] Complete: {with_smiles}/{total} have SMILES ({pre_existing} pre-existing, {newly_found} newly found)")
+    with_smiles = pre_existing + figure_derived + newly_found
+    print(f"[SMILES] Complete: {with_smiles}/{total} have SMILES ({figure_derived} from figures, {pre_existing} pre-existing, {newly_found} newly found)")
 
     if logger:
         logger.log_stage("SMILES Enrichment", {
             "total_molecules": total,
             "with_smiles": with_smiles,
+            "figure_derived": figure_derived,
             "pre_existing": pre_existing,
             "newly_found": newly_found,
             "looked_up": looked_up
