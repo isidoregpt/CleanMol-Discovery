@@ -33,7 +33,7 @@ export default function Page() {
 
   // Models
   const [primaryModel, setPrimaryModel] = useState("claude-opus-4-5-20251101");
-  const [auditorModel, setAuditorModel] = useState("gpt-5.2-thinking");
+  const [auditorModel, setAuditorModel] = useState("gpt-5.2-2025-12-11");
   const [gapModel, setGapModel] = useState("gemini-3-pro");
 
   // Paths
