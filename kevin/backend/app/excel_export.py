@@ -399,6 +399,6 @@ def export_combined_workbook(
     wb.save(output_path)
 
     if logger:
-        logger.info(f"Saved combined workbook to {output_path}")
+        logger.log_stage("Excel Export", {"status": "success", "output": str(output_path)})
 
     return output_path
