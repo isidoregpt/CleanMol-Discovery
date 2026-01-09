@@ -1,107 +1,141 @@
-"""
-SMILES lookup via PubChem API.
-Free, no API key required, rate limit ~5 requests/second.
-"""
-import requests
-from urllib.parse import quote
+"""SMILES lookup via PubChem, CIR, and OPSIN APIs."""
 import time
-import re
-import sys
-from typing import Optional
+from typing import Optional, Tuple
+from urllib.parse import quote
+
+import requests
+
+# Rate limiting
+RATE_LIMIT_DELAY = 0.25  # 4 requests/sec (under PubChem's 5/sec limit)
 
 
-PUBCHEM_BASE = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
-
-
-def normalize_name_for_search(name: str) -> str:
-    """Clean up molecule name for PubChem search."""
-    # Remove parenthetical abbreviations like "(BAC)" or "(CHX)"
-    name = re.sub(r'\s*\([A-Z]{2,5}\)\s*', ' ', name)
-    # Remove trailing/leading whitespace
-    name = name.strip()
-    return name
-
-
-def lookup_smiles(name: str, timeout: float = 15.0) -> Optional[str]:
-    """
-    Look up SMILES for a compound name via PubChem.
-    Returns canonical SMILES or None if not found.
-    """
-    clean_name = normalize_name_for_search(name)
-    if not clean_name:
+def normalize_name_for_search(name: str) -> Optional[str]:
+    """Clean compound name for API lookup."""
+    if not name:
         return None
 
-    try:
-        # URL encode the name properly for the path
-        encoded_name = quote(clean_name, safe='')
-        url = f"{PUBCHEM_BASE}/compound/name/{encoded_name}/cids/JSON"
+    # Use normalized_name if available, otherwise name_as_written
+    clean = name.strip()
 
-        # First, get CID from name
+    # Remove common suffixes that might interfere
+    for suffix in [" (as ", " ("]:
+        if suffix in clean:
+            clean = clean.split(suffix)[0].strip()
+
+    # Remove trailing parentheses content
+    if clean.endswith(")"):
+        paren_start = clean.rfind("(")
+        if paren_start > 0:
+            clean = clean[:paren_start].strip()
+
+    return clean if clean else None
+
+
+def lookup_pubchem(name: str, timeout: float = 10.0) -> Optional[str]:
+    """Look up SMILES via PubChem PUG-REST API."""
+    try:
+        encoded = quote(name, safe='')
+        url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{encoded}/property/CanonicalSMILES/TXT"
+
         resp = requests.get(url, timeout=timeout)
 
         if resp.status_code == 404:
-            # Not found in PubChem
             return None
 
-        if resp.status_code != 200:
-            print(f"[SMILES] Unexpected status {resp.status_code} for '{clean_name}'", file=sys.stderr)
-            return None
+        resp.raise_for_status()
+        smiles = resp.text.strip()
+        return smiles if smiles else None
 
-        data = resp.json()
-        cids = data.get("IdentifierList", {}).get("CID", [])
-        if not cids:
-            return None
-
-        cid = cids[0]  # Take first match
-
-        # Now get SMILES for this CID
-        smiles_url = f"{PUBCHEM_BASE}/compound/cid/{cid}/property/CanonicalSMILES/JSON"
-        resp = requests.get(smiles_url, timeout=timeout)
-
-        if resp.status_code != 200:
-            print(f"[SMILES] Failed to get SMILES for CID {cid}: status {resp.status_code}", file=sys.stderr)
-            return None
-
-        data = resp.json()
-        props = data.get("PropertyTable", {}).get("Properties", [])
-        if props and "CanonicalSMILES" in props[0]:
-            smiles = props[0]["CanonicalSMILES"]
-            print(f"[SMILES] Found: {clean_name} -> {smiles[:60]}{'...' if len(smiles) > 60 else ''}")
-            return smiles
-
-        return None
-
-    except requests.exceptions.Timeout:
-        print(f"[SMILES] Timeout looking up '{clean_name}'", file=sys.stderr)
-        return None
-    except requests.exceptions.ConnectionError as e:
-        print(f"[SMILES] Connection error for '{clean_name}': {e}", file=sys.stderr)
-        return None
     except requests.exceptions.RequestException as e:
-        print(f"[SMILES] Request error for '{clean_name}': {e}", file=sys.stderr)
-        return None
-    except ValueError as e:
-        # JSON decode error
-        print(f"[SMILES] JSON parse error for '{clean_name}': {e}", file=sys.stderr)
-        return None
-    except Exception as e:
-        print(f"[SMILES] Unexpected error for '{clean_name}': {type(e).__name__}: {e}", file=sys.stderr)
+        print(f"    [PubChem] Request error: {e}")
         return None
 
 
-def enrich_molecules_with_smiles(molecules: list, logger=None, delay: float = 0.2) -> list:
+def lookup_cir(name: str, timeout: float = 10.0) -> Optional[str]:
+    """Look up SMILES via NCI/CADD Chemical Identifier Resolver."""
+    try:
+        encoded = quote(name, safe='')
+        url = f"https://cactus.nci.nih.gov/chemical/structure/{encoded}/smiles"
+
+        resp = requests.get(url, timeout=timeout)
+
+        if resp.status_code == 404:
+            return None
+
+        resp.raise_for_status()
+        smiles = resp.text.strip()
+        return smiles if smiles else None
+
+    except requests.exceptions.RequestException as e:
+        print(f"    [CIR] Request error: {e}")
+        return None
+
+
+def lookup_opsin(name: str, timeout: float = 10.0) -> Optional[str]:
+    """Look up SMILES via OPSIN (for IUPAC systematic names)."""
+    try:
+        encoded = quote(name, safe='')
+        url = f"https://opsin.ch.cam.ac.uk/opsin/{encoded}.smi"
+
+        resp = requests.get(url, timeout=timeout)
+
+        if resp.status_code != 200:
+            return None
+
+        smiles = resp.text.strip()
+        return smiles if smiles else None
+
+    except requests.exceptions.RequestException as e:
+        print(f"    [OPSIN] Request error: {e}")
+        return None
+
+
+def lookup_smiles(name: str, timeout: float = 10.0) -> Tuple[Optional[str], str]:
     """
-    Enrich a list of molecule dicts with SMILES from PubChem.
-    Modifies molecules in place and returns the list.
+    Look up SMILES for a compound name using multiple services.
 
-    Args:
-        molecules: List of molecule dicts with 'name_as_written' or 'normalized_name'
-        logger: Optional PipelineLogger for progress
-        delay: Delay between API calls to respect rate limits
+    Returns:
+        tuple of (smiles_string or None, source_string)
+        source_string is one of: "PubChem", "CIR", "OPSIN", "not_found"
+    """
+    clean_name = normalize_name_for_search(name)
+    if not clean_name:
+        return None, "not_found"
+
+    print(f"  Looking up: '{clean_name}'")
+
+    # Try PubChem first (largest database)
+    smiles = lookup_pubchem(clean_name, timeout)
+    if smiles:
+        return smiles, "PubChem"
+
+    time.sleep(RATE_LIMIT_DELAY)
+
+    # Try CIR (good for synonyms)
+    smiles = lookup_cir(clean_name, timeout)
+    if smiles:
+        return smiles, "CIR"
+
+    time.sleep(RATE_LIMIT_DELAY)
+
+    # Try OPSIN (good for IUPAC names)
+    smiles = lookup_opsin(clean_name, timeout)
+    if smiles:
+        return smiles, "OPSIN"
+
+    return None, "not_found"
+
+
+def enrich_molecules_with_smiles(molecules: list, logger=None, delay: float = 0.25) -> list:
+    """
+    Enrich a list of molecule dicts with SMILES strings.
+
+    Modifies molecules in place and returns the list.
+    Also prints stats for visibility.
     """
     total = len(molecules)
-    found = 0
-    already_had = 0
+    pre_existing = 0
+    newly_found = 0
     looked_up = 0
 
     print(f"[SMILES] Starting enrichment for {total} molecules...")
@@ -109,39 +143,44 @@ def enrich_molecules_with_smiles(molecules: list, logger=None, delay: float = 0.
     for i, mol in enumerate(molecules):
         # Skip if already has SMILES
         if mol.get("smiles"):
-            already_had += 1
-            found += 1
+            pre_existing += 1
             continue
 
-        # Try normalized_name first, then name_as_written
+        # Get name to look up
         name = mol.get("normalized_name") or mol.get("name_as_written")
         if not name:
-            print(f"[SMILES] Skipping molecule {i+1}/{total}: no name available")
+            mol["smiles_source"] = "not_found"
+            print(f"  [{i+1}/{total}] No name available, skipping")
             continue
 
         looked_up += 1
-        smiles = lookup_smiles(name)
-        if smiles:
-            mol["smiles"] = smiles
-            mol["smiles_source"] = "PubChem"
-            found += 1
-        else:
-            # Mark as not found so we don't retry
-            mol["smiles_source"] = "not_found"
-            print(f"[SMILES] Not found: {name}")
+        print(f"  [{i+1}/{total}] {name}")
 
-        # Rate limiting
+        # Look up SMILES
+        smiles, source = lookup_smiles(name)
+
+        mol["smiles"] = smiles
+        mol["smiles_source"] = source
+
+        if smiles:
+            newly_found += 1
+            print(f"    ✓ Found via {source}: {smiles[:50]}{'...' if len(smiles) > 50 else ''}")
+        else:
+            print(f"    ✗ Not found in any database")
+
+        # Rate limit between molecules
         if i < total - 1:
             time.sleep(delay)
 
-    print(f"[SMILES] Enrichment complete: {found}/{total} have SMILES ({already_had} pre-existing, {found - already_had} newly found)")
+    with_smiles = pre_existing + newly_found
+    print(f"[SMILES] Complete: {with_smiles}/{total} have SMILES ({pre_existing} pre-existing, {newly_found} newly found)")
 
     if logger:
         logger.log_stage("SMILES Enrichment", {
             "total_molecules": total,
-            "with_smiles": found,
-            "pre_existing": already_had,
-            "newly_found": found - already_had,
+            "with_smiles": with_smiles,
+            "pre_existing": pre_existing,
+            "newly_found": newly_found,
             "looked_up": looked_up
         })
 
