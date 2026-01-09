@@ -26,33 +26,70 @@ def _write_bundle_file(bundle_dir: Path, name: str, obj: dict):
     (bundle_dir / name).write_text(json.dumps(obj, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+def _sanitize_foreign_keys(extraction: dict, logger=None) -> dict:
+    """
+    Ensure all results have valid experiment_id and molecule_id references.
+    Invalid references are set to None and annotated with orphan metadata.
+    This prevents FK constraint failures without inventing fake parent records.
+    """
+    existing_exp_ids = {e.get("experiment_id") for e in (extraction.get("experiments") or []) if e.get("experiment_id")}
+    existing_mol_ids = {m.get("molecule_id") for m in (extraction.get("molecules") or []) if m.get("molecule_id")}
+
+    orphan_count = 0
+    for result in (extraction.get("results") or []):
+        if "_meta" not in result:
+            result["_meta"] = {}
+
+        exp_id = result.get("experiment_id")
+        mol_id = result.get("molecule_id")
+
+        if exp_id and exp_id not in existing_exp_ids:
+            result["_meta"]["orphan_experiment"] = True
+            result["_meta"]["original_experiment_id"] = exp_id
+            result["experiment_id"] = None
+            orphan_count += 1
+
+        if mol_id and mol_id not in existing_mol_ids:
+            result["_meta"]["orphan_molecule"] = True
+            result["_meta"]["original_molecule_id"] = mol_id
+            result["molecule_id"] = None
+            orphan_count += 1
+
+    if orphan_count > 0 and logger:
+        logger.log_warning(
+            f"Nulled {orphan_count} orphan foreign key reference(s) in results",
+            stage="FK Sanitization"
+        )
+
+    return extraction
+
+
 def _upsert_extraction_into_db(conn, doc_id: str, extraction: dict):
+    """
+    Insert extraction data into database.
+    Assumes extraction has been sanitized via _sanitize_foreign_keys first.
+    Results with null experiment_id are skipped (orphan results).
+    """
     # Insert molecules first
     for mol in extraction.get("molecules", []) or []:
         if mol.get("evidence"):
             insert_evidence(conn, doc_id, mol["evidence"])
         insert_molecule(conn, doc_id, mol)
 
-    # Insert experiments second - build set of valid experiment_ids
-    valid_experiment_ids = set()
+    # Insert experiments second
     for exp in extraction.get("experiments", []) or []:
         if exp.get("evidence"):
             insert_evidence(conn, doc_id, exp["evidence"])
         insert_experiment(conn, doc_id, exp)
-        if exp.get("experiment_id"):
-            valid_experiment_ids.add(exp["experiment_id"])
 
-    # Insert results last - ensure experiment_id references exist
+    # Insert results last - skip orphan results (null experiment_id)
     for res in extraction.get("results", []) or []:
         if res.get("evidence"):
             insert_evidence(conn, doc_id, res["evidence"])
 
-        exp_id = res.get("experiment_id")
-        # Skip results with invalid experiment references
-        if exp_id and exp_id not in valid_experiment_ids:
+        # Skip results without valid experiment_id (orphan results are nulled by sanitization)
+        if not res.get("experiment_id"):
             continue
-        if not exp_id:
-            continue  # Skip results without experiment_id
 
         insert_result(conn, doc_id, res)
 
@@ -186,6 +223,7 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
                                 stats={"molecules": mol_count, "experiments": exp_count})
 
             _write_bundle_file(bundle_dir, "extraction_current.json", extraction)
+            extraction = _sanitize_foreign_keys(extraction, logger)
             _upsert_extraction_into_db(conn, doc_id, extraction)
 
             # Stage 3: GPT Audit
@@ -337,6 +375,7 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
                     stage_time = time.time() - stage_start
 
                     _write_bundle_file(bundle_dir, f"extraction_after_gap_round_{round_i+1}.json", extraction)
+                    extraction = _sanitize_foreign_keys(extraction, logger)
                     _upsert_extraction_into_db(conn, doc_id, extraction)
 
                     logger.log_stage(f"Stage 6: Gap Resolution (Round {round_i+1})", {
