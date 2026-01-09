@@ -1,118 +1,91 @@
 import json
-import time
-from typing import Optional
+from typing import Dict, Any, List
 from .llm_openai import call_openai_responses, extract_output_text
 from .llm_gemini import call_gemini_generate_content, extract_text as gemini_text
 from .json_utils import parse_json_strict
 from .prompts_audit import AUDIT_INSTRUCTIONS
 from .prompts_gap import GAP_HUNTER_PROMPT_TEMPLATE
-from .logger import PipelineLogger
 
+AUDIT_BATCH_SIZE = 12
 
-def run_auditor(*, openai_key: str, model: str, paper_md: str, extraction: dict,
-                logger: Optional[PipelineLogger] = None) -> dict:
-    """
-    Run GPT audit on extraction results.
+def _build_audit_batch(molecules: List, experiments: List, results: List) -> List[Dict]:
+    """Build a list of items to audit with their type info."""
+    items = []
+    for m in molecules:
+        items.append({"type": "molecule", "id_key": "molecule_id", "data": m})
+    for e in experiments:
+        items.append({"type": "experiment", "id_key": "experiment_id", "data": e})
+    for r in results:
+        items.append({"type": "result", "id_key": "result_id", "data": r})
+    return items
 
-    Returns:
-        dict with audit results
-    """
-    start_time = time.time()
+def _batch_items(items: List, batch_size: int) -> List[List]:
+    """Split items into batches."""
+    return [items[i:i + batch_size] for i in range(0, len(items), batch_size)]
+
+def _run_single_audit_batch(*, openai_key: str, model: str, paper_md: str, batch: List[Dict]) -> Dict:
+    """Run audit on a single batch of items."""
+    batch_extraction = {"molecules": [], "experiments": [], "results": []}
+    for item in batch:
+        if item["type"] == "molecule":
+            batch_extraction["molecules"].append(item["data"])
+        elif item["type"] == "experiment":
+            batch_extraction["experiments"].append(item["data"])
+        elif item["type"] == "result":
+            batch_extraction["results"].append(item["data"])
 
     prompt = (
         "Paper Markdown:\n---\n" + paper_md + "\n---\n\n"
-        "Extraction JSON:\n---\n" + json.dumps(extraction, ensure_ascii=False) + "\n---"
+        "Extraction JSON:\n---\n" + json.dumps(batch_extraction, ensure_ascii=False) + "\n---"
     )
 
-    resp, api_meta = call_openai_responses(
+    resp, _meta = call_openai_responses(
         api_key=openai_key, model=model, instructions=AUDIT_INSTRUCTIONS,
         input_text=prompt, reasoning_effort="high", max_output_tokens=6000
     )
-
-    # Log API call if logger provided
-    if logger:
-        logger.log_api_call(
-            provider=api_meta["provider"],
-            model=api_meta["model"],
-            endpoint=api_meta["endpoint"],
-            tokens_in=api_meta["tokens_in"],
-            tokens_out=api_meta["tokens_out"],
-            duration_sec=api_meta["duration_sec"],
-            status="success"
-        )
-
     out = extract_output_text(resp)
-    data = parse_json_strict(out)
+    return parse_json_strict(out)
 
-    elapsed = time.time() - start_time
+def run_auditor(*, openai_key: str, model: str, paper_md: str, extraction: dict) -> dict:
+    """Run audit in batches to avoid token limits."""
+    molecules = extraction.get("molecules") or []
+    experiments = extraction.get("experiments") or []
+    results = extraction.get("results") or []
 
-    # Count verdicts
-    audits = data.get("audits") or []
-    verdicts = {"SUPPORTED": 0, "AMBIGUOUS": 0, "REJECT": 0}
-    for a in audits:
-        v = a.get("verdict", "").upper()
-        if v in verdicts:
-            verdicts[v] += 1
+    all_items = _build_audit_batch(molecules, experiments, results)
 
-    # Add metadata for logging
-    data["_meta"] = {
-        "time": elapsed,
-        "tokens_in": api_meta["tokens_in"],
-        "tokens_out": api_meta["tokens_out"],
-        "items_audited": len(audits),
-        "verdicts": verdicts
-    }
+    if len(all_items) <= AUDIT_BATCH_SIZE:
+        prompt = (
+            "Paper Markdown:\n---\n" + paper_md + "\n---\n\n"
+            "Extraction JSON:\n---\n" + json.dumps(extraction, ensure_ascii=False) + "\n---"
+        )
+        resp, _meta = call_openai_responses(
+            api_key=openai_key, model=model, instructions=AUDIT_INSTRUCTIONS,
+            input_text=prompt, reasoning_effort="high", max_output_tokens=6000
+        )
+        out = extract_output_text(resp)
+        return parse_json_strict(out)
 
-    return data
+    batches = _batch_items(all_items, AUDIT_BATCH_SIZE)
+    all_audits = []
+
+    for batch in batches:
+        try:
+            batch_result = _run_single_audit_batch(
+                openai_key=openai_key, model=model, paper_md=paper_md, batch=batch
+            )
+            all_audits.extend(batch_result.get("audits") or [])
+        except Exception as e:
+            print(f"Audit batch failed: {e}")
+            continue
+
+    return {"audits": all_audits}
 
 
-def run_gap_hunter(*, gemini_key: str, model: str, paper_md: str, extraction: dict,
-                   logger: Optional[PipelineLogger] = None) -> dict:
-    """
-    Run Gemini gap hunter to find missed data.
-
-    Returns:
-        dict with gap suggestions
-    """
-    start_time = time.time()
-
+def run_gap_hunter(*, gemini_key: str, model: str, paper_md: str, extraction: dict) -> dict:
     prompt = GAP_HUNTER_PROMPT_TEMPLATE.format(
         paper_md=paper_md, extraction_json=json.dumps(extraction, ensure_ascii=False)
     )
-
-    resp, api_meta = call_gemini_generate_content(api_key=gemini_key, model=model, prompt=prompt)
-
-    # Log API call if logger provided
-    if logger:
-        logger.log_api_call(
-            provider=api_meta["provider"],
-            model=api_meta["model"],
-            endpoint=api_meta["endpoint"],
-            tokens_in=api_meta["tokens_in"],
-            tokens_out=api_meta["tokens_out"],
-            duration_sec=api_meta["duration_sec"],
-            status="success"
-        )
-
+    resp, _meta = call_gemini_generate_content(api_key=gemini_key, model=model, prompt=prompt)
     out = gemini_text(resp)
-    data = parse_json_strict(out)
-
-    elapsed = time.time() - start_time
-
-    # Count gap types
-    gaps = data.get("gaps") or []
-    gap_types = {}
-    for g in gaps:
-        kind = g.get("kind", "unknown")
-        gap_types[kind] = gap_types.get(kind, 0) + 1
-
-    # Add metadata for logging
-    data["_meta"] = {
-        "time": elapsed,
-        "tokens_in": api_meta["tokens_in"],
-        "tokens_out": api_meta["tokens_out"],
-        "gaps_identified": len(gaps),
-        "gap_types": gap_types
-    }
-
-    return data
+    return parse_json_strict(out)
