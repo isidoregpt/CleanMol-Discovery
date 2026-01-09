@@ -224,24 +224,28 @@ def validate_smiles(smiles: str) -> dict:
         smiles: SMILES string to validate
 
     Returns:
-        Dict with keys: valid, canonical_smiles, error
+        Dict with keys: valid, canonical_smiles, error, validation_skipped
     """
+    if not smiles or not smiles.strip():
+        return {"valid": False, "canonical_smiles": None, "error": "Empty SMILES", "validation_skipped": False}
+
     try:
         from rdkit import Chem
-
-        if not smiles or not smiles.strip():
-            return {"valid": False, "canonical_smiles": None, "error": "Empty SMILES"}
 
         mol = Chem.MolFromSmiles(smiles)
 
         if mol is None:
-            return {"valid": False, "canonical_smiles": None, "error": "Invalid SMILES structure"}
+            return {"valid": False, "canonical_smiles": None, "error": "Invalid SMILES structure", "validation_skipped": False}
 
         canonical = Chem.MolToSmiles(mol, canonical=True)
-        return {"valid": True, "canonical_smiles": canonical, "error": None}
+        return {"valid": True, "canonical_smiles": canonical, "error": None, "validation_skipped": False}
 
+    except ImportError as e:
+        # RDKit not available - skip validation but keep SMILES
+        print(f"    [RDKit] Not available ({e}), skipping validation")
+        return {"valid": True, "canonical_smiles": smiles, "error": None, "validation_skipped": True}
     except Exception as e:
-        return {"valid": False, "canonical_smiles": None, "error": str(e)}
+        return {"valid": False, "canonical_smiles": None, "error": str(e), "validation_skipped": False}
 
 
 def analyze_pdf_figures(
@@ -365,9 +369,11 @@ def match_figure_compounds_to_molecules(
     figure_lookup = {}
     for compound in figure_compounds:
         if compound.get("smiles") and compound.get("smiles_valid"):
-            name = compound.get("name", "").strip().lower()
+            name = compound.get("name") or ""
             if name:
-                figure_lookup[name] = compound
+                name = name.strip().lower()
+                if name:
+                    figure_lookup[name] = compound
 
     # Try to match to extracted molecules
     for mol in extracted_molecules:
@@ -375,12 +381,12 @@ def match_figure_compounds_to_molecules(
         if mol.get("smiles"):
             continue
 
-        # Try to match by various name fields
-        names_to_try = [
-            mol.get("name_as_written", "").strip().lower(),
-            mol.get("normalized_name", "").strip().lower(),
-            mol.get("molecule_id", "").strip().lower()
-        ]
+        # Try to match by various name fields (with null safety)
+        names_to_try = []
+        for field in ["name_as_written", "normalized_name", "molecule_id"]:
+            val = mol.get(field)
+            if val:
+                names_to_try.append(val.strip().lower())
 
         for name in names_to_try:
             if name and name in figure_lookup:
