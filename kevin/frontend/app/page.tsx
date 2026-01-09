@@ -304,9 +304,9 @@ export default function Page() {
                   const docsProcessed = result?.documents_processed?.length || 0;
                   setStats({
                     documents: docsProcessed,
-                    molecules: 0,  // Will be updated from real data
-                    experiments: 0,
-                    results: 0,
+                    molecules: result?.total_molecules || 0,
+                    experiments: result?.total_experiments || 0,
+                    results: result?.total_results || 0,
                   });
 
                   setCompleted(true);
