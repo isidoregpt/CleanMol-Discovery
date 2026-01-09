@@ -82,7 +82,7 @@ def run_auditor(*, openai_key: str, model: str, paper_md: str, extraction: dict,
     return {"audits": all_audits}
 
 
-def run_gap_hunter(*, gemini_key: str, model: str, paper_md: str, extraction: dict) -> dict:
+def run_gap_hunter(*, gemini_key: str, model: str, paper_md: str, extraction: dict, logger=None) -> dict:
     prompt = GAP_HUNTER_PROMPT_TEMPLATE.format(
         paper_md=paper_md, extraction_json=json.dumps(extraction, ensure_ascii=False)
     )
