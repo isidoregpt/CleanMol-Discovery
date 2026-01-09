@@ -70,7 +70,7 @@ def _get_db_stats(conn) -> dict:
     return stats
 
 
-def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, options: dict) -> dict:
+def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, options: dict, progress_callback=None) -> dict:
     input_path = Path(input_dir)
     out = Path(output_dir)
     bundles_root = out / "bundles"
@@ -86,7 +86,7 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
         "keys": keys,
         "options": options
     }
-    logger = PipelineLogger(output_dir, config)
+    logger = PipelineLogger(output_dir, config, progress_callback=progress_callback)
 
     db_path = out / "dataset.db"
     conn = connect_db(db_path)
@@ -108,8 +108,10 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
     processed = []
 
     pdfs = sorted([p for p in input_path.glob("*.pdf") if p.is_file()])
+    doc_total = len(pdfs)
 
-    for pdf in pdfs:
+    for doc_i, pdf in enumerate(pdfs):
+        doc_index = doc_i + 1
         doc_start_time = time.time()
 
         try:
@@ -117,6 +119,7 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
             logger.start_document(pdf.name, "", str(pdf))
 
             # Stage 1: PDF Extraction
+            logger.emit_progress("PDF", "start", doc_index=doc_index, doc_total=doc_total)
             stage_start = time.time()
             bundle = extract_bundle(pdf, bundles_root)
             doc_id = bundle["doc_id"]
@@ -138,6 +141,8 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
                 "characters_extracted": len(paper_md),
                 "bundle_path": str(bundle_dir)
             })
+            logger.emit_progress("PDF", "end", doc_index=doc_index, doc_total=doc_total,
+                                stats={"pages": meta.get("pages", 0), "chars": len(paper_md)})
 
             insert_document(conn, {
                 "doc_id": doc_id,
@@ -149,6 +154,7 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
             })
 
             # Stage 2: Opus Extraction
+            logger.emit_progress("OPUS", "start", doc_index=doc_index, doc_total=doc_total)
             stage_start = time.time()
             if not (anthropic_key and primary_model):
                 raise ValueError("Missing Anthropic key or primary model.")
@@ -174,6 +180,10 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
                 "experiments_extracted": extraction_meta.get("experiments_count", 0),
                 "results_extracted": extraction_meta.get("results_count", 0)
             })
+            mol_count = len(extraction.get("molecules") or [])
+            exp_count = len(extraction.get("experiments") or [])
+            logger.emit_progress("OPUS", "end", doc_index=doc_index, doc_total=doc_total,
+                                stats={"molecules": mol_count, "experiments": exp_count})
 
             _write_bundle_file(bundle_dir, "extraction_current.json", extraction)
             _upsert_extraction_into_db(conn, doc_id, extraction)
@@ -181,6 +191,7 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
             # Stage 3: GPT Audit
             audit_json = None
             if openai_key and auditor_model:
+                logger.emit_progress("AUDIT", "start", doc_index=doc_index, doc_total=doc_total)
                 stage_start = time.time()
                 audit_json = run_auditor(
                     openai_key=openai_key, model=auditor_model,
@@ -198,6 +209,8 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
                     "items_audited": audit_meta.get("items_audited", 0),
                     "verdicts": audit_meta.get("verdicts", {})
                 })
+                logger.emit_progress("AUDIT", "end", doc_index=doc_index, doc_total=doc_total,
+                                    stats={"audited": audit_meta.get("items_audited", 0)})
 
                 # Log warnings for ambiguous/rejected items
                 verdicts = audit_meta.get("verdicts", {})
@@ -227,6 +240,7 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
                     })
 
                 # Stage 4: Auto-repair
+                logger.emit_progress("REPAIR", "start", doc_index=doc_index, doc_total=doc_total)
                 stage_start = time.time()
                 repair_report = auto_repair(
                     conn=conn, doc_id=doc_id, bundle_dir=bundle_dir,
@@ -247,6 +261,8 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
                     "repairs_applied": repair_meta.get("applied", 0),
                     "repairs_failed": repair_meta.get("failed", 0)
                 })
+                logger.emit_progress("REPAIR", "end", doc_index=doc_index, doc_total=doc_total,
+                                    stats={"repaired": repair_meta.get("applied", 0)})
             else:
                 logger.log_stage("Stage 3: GPT-5.2 Audit", {
                     "status": "skipped",
@@ -260,6 +276,7 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
             # Stage 5: Gap Hunt
             gaps_json = None
             if gemini_key and gap_model:
+                logger.emit_progress("GAP", "start", doc_index=doc_index, doc_total=doc_total)
                 stage_start = time.time()
                 gaps_json = run_gap_hunter(
                     gemini_key=gemini_key, model=gap_model,
@@ -278,6 +295,9 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
                     "gaps_identified": gap_meta.get("gaps_identified", 0),
                     "gap_types": gap_meta.get("gap_types", {})
                 })
+                gaps_count = len(gaps_json.get("gaps") or [])
+                logger.emit_progress("GAP", "end", doc_index=doc_index, doc_total=doc_total,
+                                    stats={"gaps": gaps_count})
 
                 for g in gaps_json.get("gaps", []) or []:
                     insert_gap(conn, {
@@ -300,6 +320,7 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
             if gaps_json is not None:
                 for round_i in range(max_gap_rounds):
                     # Stage 6: Gap Resolution
+                    logger.emit_progress("RESOLVE", "start", doc_index=doc_index, doc_total=doc_total)
                     stage_start = time.time()
                     resolve_out = resolve_gaps_with_targeted_opus(
                         anthropic_key=anthropic_key,
@@ -326,6 +347,8 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
                         "new_experiments": resolve_meta.get("new_experiments", 0),
                         "new_results": resolve_meta.get("new_results", 0)
                     })
+                    logger.emit_progress("RESOLVE", "end", doc_index=doc_index, doc_total=doc_total,
+                                        stats={"resolved": resolve_meta.get("gaps_resolved", 0)})
 
                     # Stage 7: Re-audit after gap additions
                     if openai_key and auditor_model:
@@ -367,6 +390,7 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
                         _write_bundle_file(bundle_dir, f"gaps_after_round_{round_i+1}.json", gaps_json)
 
             # Stage 8: Export
+            logger.emit_progress("EXPORT", "start", doc_index=doc_index, doc_total=doc_total)
             stage_start = time.time()
             mol_count = len(extraction.get("molecules") or [])
             exp_count = len(extraction.get("experiments") or [])
@@ -386,12 +410,14 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
                         f"{doc_id}_dataset.jsonl": f"{mol_count + exp_count + res_count} records"
                     }
                 })
+                logger.emit_progress("EXPORT", "end", doc_index=doc_index, doc_total=doc_total)
             else:
                 logger.log_warning(f"Skipping export for {doc_id}: no data in extraction", stage="Export")
                 logger.log_stage("Stage 8: Export", {
                     "status": "skipped",
                     "reason": "No data in extraction"
                 })
+                logger.emit_progress("EXPORT", "end", doc_index=doc_index, doc_total=doc_total)
 
             # Add to extraction summary
             logger.add_extraction_summary(

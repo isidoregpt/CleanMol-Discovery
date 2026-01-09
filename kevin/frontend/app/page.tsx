@@ -25,6 +25,24 @@ const PIPELINE_STAGES = [
   { id: "export", name: "Export Dataset", icon: "💾" },
 ];
 
+// Stage weights for weighted progress calculation
+const STAGE_WEIGHTS: Record<string, number> = {
+  PDF: 10,
+  OPUS: 30,
+  AUDIT: 20,
+  REPAIR: 5,
+  GAP: 15,
+  RESOLVE: 15,
+  EXPORT: 5,
+};
+
+const STAGE_ORDER = ["PDF", "OPUS", "AUDIT", "REPAIR", "GAP", "RESOLVE", "EXPORT"];
+
+// Creep function: starts fast, slows down, never reaches cap
+function creepProgress(elapsedMs: number, cap = 0.92, speed = 0.0003): number {
+  return cap * (1 - Math.exp(-speed * elapsedMs));
+}
+
 export default function Page() {
   // API Keys
   const [openai, setOpenai] = useState("");
@@ -48,6 +66,13 @@ export default function Page() {
   const [stages, setStages] = useState(
     PIPELINE_STAGES.map(s => ({ ...s, status: "pending" as const, detail: "" }))
   );
+
+  // Streaming progress state
+  const [docIndex, setDocIndex] = useState(0);
+  const [docTotal, setDocTotal] = useState(0);
+  const [stageStartTime, setStageStartTime] = useState<number | null>(null);
+  const [stageProgress, setStageProgress] = useState<Record<string, number>>({});
+  const [lastUpdate, setLastUpdate] = useState(Date.now());
 
   // Results
   const [stats, setStats] = useState({
@@ -109,6 +134,42 @@ export default function Page() {
     localStorage.setItem(LS.paths, JSON.stringify({ inputDir, outputDir }));
   }, [inputDir, outputDir]);
 
+  // Creep animation for progress bar during LLM calls
+  useEffect(() => {
+    if (!running || !stageStartTime) return;
+
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - stageStartTime;
+      const creep = creepProgress(elapsed);
+
+      // Calculate weighted progress
+      let totalWeight = 0;
+      let completedWeight = 0;
+
+      for (const stage of STAGE_ORDER) {
+        const weight = STAGE_WEIGHTS[stage] || 0;
+        totalWeight += weight;
+
+        if (stageProgress[stage] === 1) {
+          completedWeight += weight;
+        } else if (stage === currentStage) {
+          completedWeight += weight * creep;
+        }
+      }
+
+      // Factor in document progress
+      const docProgressVal = docTotal > 0 ? (docIndex - 1) / docTotal : 0;
+      const currentDocProgress = totalWeight > 0 ? completedWeight / totalWeight : 0;
+      const overall = docTotal > 0
+        ? (docProgressVal + currentDocProgress / docTotal) * 100
+        : currentDocProgress * 100;
+
+      setProgress(Math.min(99, overall));
+    }, 200);
+
+    return () => clearInterval(interval);
+  }, [running, stageStartTime, currentStage, stageProgress, docIndex, docTotal]);
+
   // Terminal logging
   const addLog = useCallback((text: string, type: TerminalLine["type"] = "info", prefix?: string) => {
     const timestamp = new Date().toLocaleTimeString("en-US", { hour12: false });
@@ -122,7 +183,18 @@ export default function Page() {
     ));
   }, []);
 
-  // Simulate pipeline with SSE (or polling in real implementation)
+  // Map backend stage names to frontend stage IDs
+  const stageToId: Record<string, string> = {
+    PDF: "pdf",
+    OPUS: "opus",
+    AUDIT: "audit",
+    REPAIR: "repair",
+    GAP: "gap",
+    RESOLVE: "resolve",
+    EXPORT: "export",
+  };
+
+  // Run pipeline with streaming SSE updates
   const runPipeline = async () => {
     setRunning(true);
     setCompleted(false);
@@ -131,105 +203,128 @@ export default function Page() {
     setStages(PIPELINE_STAGES.map(s => ({ ...s, status: "pending" as const, detail: "" })));
     setStats({ molecules: 0, experiments: 0, results: 0, documents: 0 });
     setLogFile("");
+    setStageProgress({});
+    setCurrentStage("");
+    setDocIndex(0);
+    setDocTotal(0);
+    setStageStartTime(null);
 
     addLog("Initializing Kevin Pipeline v1.0", "system", "SYSTEM");
     addLog(`Input: ${inputDir}`, "dim");
     addLog(`Output: ${outputDir}`, "dim");
     addLog("", "dim");
 
+    let buffer = "";
+
     try {
-      const payload = {
-        input_dir: inputDir,
-        output_dir: outputDir,
-        models: {
-          primary: primaryModel,
-          auditor: auditorModel,
-          gapHunter: gapModel
-        },
-        keys: { openai, anthropic, gemini },
-        options: { max_gap_rounds: 2 }
-      };
+      addLog("Connecting to backend server (streaming)...", "info", "NET");
 
-      addLog("Connecting to backend server...", "info", "NET");
-
-      const response = await fetch("http://localhost:8787/api/run", {
+      const response = await fetch("http://localhost:8787/api/run-stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          input_dir: inputDir,
+          output_dir: outputDir,
+          models: {
+            primary: primaryModel,
+            auditor: auditorModel,
+            gapHunter: gapModel
+          },
+          keys: { openai, anthropic, gemini },
+          options: { max_gap_rounds: 2 }
+        }),
       });
 
       if (!response.ok) {
         throw new Error(`Server error: ${response.status}`);
       }
 
-      // In a real implementation, you'd use SSE or WebSockets for real-time updates
-      // For now, we'll simulate the progress after getting the response
-      const result = await response.json();
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
 
-      // Simulate progressive updates (in production, these would come from SSE)
-      await simulateProgress(result);
+      if (!reader) throw new Error("No response body");
 
-      if (result.ok) {
-        addLog("", "dim");
-        addLog("═══════════════════════════════════════════", "success");
-        addLog("  PIPELINE COMPLETED SUCCESSFULLY", "success", "✓");
-        addLog("═══════════════════════════════════════════", "success");
+      addLog("Connected! Receiving real-time updates...", "success", "NET");
 
-        if (result.log_file) {
-          setLogFile(result.log_file);
-          addLog(`Log file: ${result.log_file}`, "info");
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process complete SSE events (split on \n\n)
+        const events = buffer.split("\n\n");
+        buffer = events.pop() || "";  // Keep incomplete event in buffer
+
+        for (const event of events) {
+          for (const line of event.split("\n")) {
+            if (line.startsWith("data: ")) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                setLastUpdate(Date.now());
+
+                if (data.type === "progress") {
+                  addLog(data.message, "info");
+                } else if (data.type === "stage_progress") {
+                  setDocIndex(data.doc_index || 0);
+                  setDocTotal(data.doc_total || 0);
+
+                  const stageId = stageToId[data.stage] || data.stage.toLowerCase();
+
+                  if (data.event === "start") {
+                    setCurrentStage(data.stage);
+                    setStageStartTime(Date.now());
+                    updateStage(stageId, "active");
+                    addLog(`[${data.doc_index}/${data.doc_total}] Starting ${data.stage}...`, "info", data.stage);
+                  } else if (data.event === "end") {
+                    setStageProgress(prev => ({ ...prev, [data.stage]: 1 }));
+                    updateStage(stageId, "completed");
+                    const statsStr = data.stats
+                      ? ` (${Object.entries(data.stats).map(([k, v]) => `${v} ${k}`).join(", ")})`
+                      : "";
+                    addLog(`[${data.doc_index}/${data.doc_total}] ✓ ${data.stage} complete${statsStr}`, "success", data.stage);
+                  }
+                } else if (data.type === "complete") {
+                  setProgress(100);
+                  addLog("", "dim");
+                  addLog("═══════════════════════════════════════════", "success");
+                  addLog("  PIPELINE COMPLETED SUCCESSFULLY", "success", "✓");
+                  addLog("═══════════════════════════════════════════", "success");
+
+                  // Extract stats from result
+                  const result = data.result;
+                  if (result?.log_file) {
+                    setLogFile(result.log_file);
+                    addLog(`Log file: ${result.log_file}`, "info");
+                  }
+
+                  const docsProcessed = result?.documents_processed?.length || 0;
+                  setStats({
+                    documents: docsProcessed,
+                    molecules: 0,  // Will be updated from real data
+                    experiments: 0,
+                    results: 0,
+                  });
+
+                  setCompleted(true);
+                } else if (data.type === "error") {
+                  addLog(`ERROR: ${data.error}`, "error", "✕");
+                }
+                // Ignore heartbeat, just updates lastUpdate
+              } catch {
+                // Ignore JSON parse errors for malformed chunks
+              }
+            }
+          }
         }
-
-        setCompleted(true);
-      } else {
-        throw new Error(result.run?.errors?.[0]?.error || "Pipeline failed");
       }
-
     } catch (e: unknown) {
       const errorMessage = e instanceof Error ? e.message : String(e);
       addLog(`ERROR: ${errorMessage}`, "error", "✕");
-      updateStage(currentStage || "pdf", "error");
+      updateStage(currentStage ? stageToId[currentStage] || "pdf" : "pdf", "error");
     } finally {
       setRunning(false);
     }
-  };
-
-  // Simulate progress updates (replace with real SSE in production)
-  const simulateProgress = async (result: Record<string, unknown>) => {
-    const stageProgress = [
-      { id: "pdf", progress: 15, delay: 500 },
-      { id: "opus", progress: 35, delay: 2000 },
-      { id: "audit", progress: 55, delay: 1500 },
-      { id: "repair", progress: 70, delay: 1000 },
-      { id: "gap", progress: 85, delay: 1500 },
-      { id: "resolve", progress: 95, delay: 1000 },
-      { id: "export", progress: 100, delay: 500 },
-    ];
-
-    for (const stage of stageProgress) {
-      setCurrentStage(stage.id);
-      updateStage(stage.id, "active");
-
-      const stageInfo = PIPELINE_STAGES.find(s => s.id === stage.id);
-      addLog(`Starting ${stageInfo?.name}...`, "info", stage.id.toUpperCase());
-
-      await new Promise(r => setTimeout(r, stage.delay));
-
-      setProgress(stage.progress);
-      updateStage(stage.id, "completed");
-      addLog(`${stageInfo?.name} completed`, "success", stage.id.toUpperCase());
-    }
-
-    // Update final stats from result
-    const run = result.run as Record<string, unknown> | undefined;
-    const docsProcessed = run?.documents_processed as string[] | undefined;
-    const docs = docsProcessed?.length || 0;
-    setStats({
-      documents: docs,
-      molecules: Math.floor(Math.random() * 20) + 5, // Replace with real data
-      experiments: Math.floor(Math.random() * 15) + 3,
-      results: Math.floor(Math.random() * 50) + 10,
-    });
   };
 
   const canRun = useMemo(() => {
@@ -285,9 +380,25 @@ export default function Page() {
           <section className="glass-card p-6 fade-in">
             <ProgressBar
               progress={progress}
-              stage={currentStage ? PIPELINE_STAGES.find(s => s.id === currentStage)?.name || "" : "Initializing..."}
+              stage={currentStage
+                ? `${currentStage}${docTotal > 0 ? ` (Doc ${docIndex}/${docTotal})` : ""}`
+                : "Initializing..."}
               isActive={running}
             />
+
+            {/* Last update indicator */}
+            {running && (
+              <div className="text-xs text-white/40 mt-2 flex items-center justify-between">
+                <span>
+                  Last update: {Math.round((Date.now() - lastUpdate) / 1000)}s ago
+                </span>
+                {Date.now() - lastUpdate > 30000 && (
+                  <span className="text-amber-400/80">
+                    Still working, LLM calls can take a few minutes...
+                  </span>
+                )}
+              </div>
+            )}
 
             {/* Stats row */}
             {completed && (
