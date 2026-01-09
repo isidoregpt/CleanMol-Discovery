@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from typing import Dict, Any, List
 from .llm_openai import call_openai_responses, extract_output_text
 from .llm_gemini import call_gemini_generate_content, extract_text as gemini_text
@@ -82,10 +83,51 @@ def run_auditor(*, openai_key: str, model: str, paper_md: str, extraction: dict,
     return {"audits": all_audits}
 
 
-def run_gap_hunter(*, gemini_key: str, model: str, paper_md: str, extraction: dict, logger=None) -> dict:
+def run_gap_hunter(
+    *,
+    gemini_key: str,
+    model: str,
+    paper_md: str,
+    extraction: dict,
+    bundle_dir=None,
+    logger=None,
+) -> dict:
     prompt = GAP_HUNTER_PROMPT_TEMPLATE.format(
         paper_md=paper_md, extraction_json=json.dumps(extraction, ensure_ascii=False)
     )
-    resp, _meta = call_gemini_generate_content(api_key=gemini_key, model=model, prompt=prompt)
-    out = gemini_text(resp)
-    return parse_json_strict(out)
+
+    resp, api_meta = call_gemini_generate_content(
+        api_key=gemini_key,
+        model=model,
+        prompt=prompt,
+        response_mime_type="application/json",
+    )
+
+    text = gemini_text(resp)
+
+    try:
+        parsed = parse_json_strict(text)
+    except Exception as e:
+        # Save raw output for debugging
+        if bundle_dir:
+            try:
+                Path(bundle_dir).joinpath("gemini_gap_raw.txt").write_text(text or "", encoding="utf-8")
+            except Exception:
+                pass
+
+        if logger and hasattr(logger, "log_warning"):
+            try:
+                logger.log_warning(
+                    f"Gemini gap-hunter output was not valid JSON; continuing with empty gaps. Error: {e}",
+                    stage="Gemini Gap Hunt",
+                )
+            except Exception:
+                pass
+
+        parsed = {
+            "gaps": [],
+            "notes": f"Gemini output was not valid JSON; continuing with empty gaps. Error: {e}",
+            "_meta": {"parse_fallback": True, "raw_preview": (text or '')[:500]},
+        }
+
+    return parsed
