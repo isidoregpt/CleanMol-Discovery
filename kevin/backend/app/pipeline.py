@@ -366,23 +366,30 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
 
             # Stage 8: Export
             stage_start = time.time()
-            export_jsonl(out, doc_id, extraction)
-            stage_time = time.time() - stage_start
-
             mol_count = len(extraction.get("molecules") or [])
             exp_count = len(extraction.get("experiments") or [])
             res_count = len(extraction.get("results") or [])
 
-            logger.log_stage("Stage 8: Export", {
-                "status": "success",
-                "time": stage_time,
-                "files_created": {
-                    f"{doc_id}_molecules.jsonl": f"{mol_count} records",
-                    f"{doc_id}_experiments.jsonl": f"{exp_count} records",
-                    f"{doc_id}_results.jsonl": f"{res_count} records",
-                    f"{doc_id}_dataset.jsonl": f"{mol_count + exp_count + res_count} records"
-                }
-            })
+            if extraction.get("molecules") or extraction.get("experiments") or extraction.get("results"):
+                export_jsonl(out, doc_id, extraction)
+                stage_time = time.time() - stage_start
+
+                logger.log_stage("Stage 8: Export", {
+                    "status": "success",
+                    "time": stage_time,
+                    "files_created": {
+                        f"{doc_id}_molecules.jsonl": f"{mol_count} records",
+                        f"{doc_id}_experiments.jsonl": f"{exp_count} records",
+                        f"{doc_id}_results.jsonl": f"{res_count} records",
+                        f"{doc_id}_dataset.jsonl": f"{mol_count + exp_count + res_count} records"
+                    }
+                })
+            else:
+                logger.log_warning(f"Skipping export for {doc_id}: no data in extraction", stage="Export")
+                logger.log_stage("Stage 8: Export", {
+                    "status": "skipped",
+                    "reason": "No data in extraction"
+                })
 
             # Add to extraction summary
             logger.add_extraction_summary(
