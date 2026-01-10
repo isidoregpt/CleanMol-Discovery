@@ -193,6 +193,23 @@ def _serialize_field(value: Any) -> str:
     return str(value)
 
 
+def _sanitize_cell(value: Any) -> Any:
+    """Sanitize a single cell value for Excel compatibility.
+
+    Converts dict/list values to JSON strings to prevent Excel errors.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False)
+    return value
+
+
+def _sanitize_row(row: List[Any]) -> List[Any]:
+    """Sanitize an entire row for Excel compatibility."""
+    return [_sanitize_cell(cell) for cell in row]
+
+
 def merge_and_export_datasets(output_dir: Path, logger=None) -> dict:
     """
     Merge all JSONL exports into unified dataset files.
@@ -259,300 +276,332 @@ def merge_and_export_datasets(output_dir: Path, logger=None) -> dict:
     molecules_without_smiles = [m for m in all_molecules if not m.get("smiles")]
 
     files_created = []
+    errors = []
 
-    # ========================================
-    # 1. Create unified_dataset.xlsx
-    # ========================================
-    wb = Workbook()
-    if "Sheet" in wb.sheetnames:
-        del wb["Sheet"]
-
-    # --- Sheet 1: Summary ---
-    ws_summary = wb.create_sheet("Summary", 0)
-    ws_summary.append(["Field", "Value"])
-    ws_summary.append(["Total molecules (with SMILES)", len(molecules_with_smiles)])
-    ws_summary.append(["Total molecules (without SMILES)", len(molecules_without_smiles)])
-    ws_summary.append(["Total experiments", len(all_experiments)])
-    ws_summary.append(["Total results", len(all_results)])
-    ws_summary.append(["Papers processed", ", ".join(source_papers.values())])
-
-    _apply_header_style(ws_summary, row=1)
-    _auto_width(ws_summary)
-
-    # --- Sheet 2: Molecules (WITH SMILES only, deduplicated) ---
-    ws_mol = wb.create_sheet("Molecules")
-    mol_headers = [
-        "source_paper", "molecule_id", "name_as_written", "normalized_name",
-        "smiles", "smiles_source", "smiles_confidence", "head_group_class",
-        "chain_lengths", "notes"
-    ]
-    ws_mol.append(mol_headers)
-
-    # Deduplicate by SMILES - combine source_papers
-    smiles_to_molecules = defaultdict(list)
-    for mol in molecules_with_smiles:
+    # Compute stats early for use in all outputs
+    # Deduplicate by SMILES for counting
+    seen_smiles_for_count = set()
+    for mol in all_molecules:
         smiles = mol.get("smiles", "")
         if smiles:
-            smiles_to_molecules[smiles].append(mol)
+            seen_smiles_for_count.add(smiles)
 
-    for smiles, mols in smiles_to_molecules.items():
-        # Combine source papers
-        sources = sorted(set(m.get("source_paper", "") for m in mols))
-        combined_source = ", ".join(s for s in sources if s)
-
-        # Use first molecule as representative
-        mol = mols[0]
-        ws_mol.append([
-            combined_source,
-            mol.get("molecule_id", ""),
-            mol.get("name_as_written", ""),
-            mol.get("normalized_name", ""),
-            smiles,
-            mol.get("smiles_source", ""),
-            mol.get("smiles_confidence", ""),
-            mol.get("head_group_class", ""),
-            _serialize_field(mol.get("chain_lengths")),
-            mol.get("notes", "")
-        ])
-
-    _apply_header_style(ws_mol)
-    _apply_data_style(ws_mol)
-    _auto_width(ws_mol)
-
-    # --- Sheet 3: Experiments ---
-    ws_exp = wb.create_sheet("Experiments")
-    exp_headers = [
-        "source_paper", "experiment_id", "organism", "strain", "assay_type",
-        "conditions", "exposure_protocol", "notes"
-    ]
-    ws_exp.append(exp_headers)
-
-    for exp in all_experiments:
-        ws_exp.append([
-            exp.get("source_paper", ""),
-            exp.get("experiment_id", ""),
-            exp.get("organism", ""),
-            exp.get("strain", ""),
-            exp.get("assay_type", "") or exp.get("type", ""),
-            _serialize_field(exp.get("conditions")),
-            exp.get("exposure_protocol", ""),
-            exp.get("notes", "")
-        ])
-
-    _apply_header_style(ws_exp)
-    _apply_data_style(ws_exp)
-    _auto_width(ws_exp)
-
-    # --- Sheet 4: Results ---
-    ws_res = wb.create_sheet("Results")
-    res_headers = [
-        "source_paper", "result_id", "molecule_id", "experiment_id",
-        "endpoint", "value", "units", "directionality", "confidence", "notes"
-    ]
-    ws_res.append(res_headers)
-
-    for res in all_results:
-        ws_res.append([
-            res.get("source_paper", ""),
-            res.get("result_id", ""),
-            res.get("molecule_id", ""),
-            res.get("experiment_id", ""),
-            res.get("endpoint", "") or res.get("property_name", ""),
-            res.get("value", ""),
-            res.get("units", "") or res.get("unit", ""),
-            res.get("directionality", ""),
-            res.get("confidence", ""),
-            res.get("notes", "")
-        ])
-
-    _apply_header_style(ws_res)
-    _apply_data_style(ws_res)
-    _auto_width(ws_res)
-
-    # --- Sheet 5: Missing SMILES ---
-    ws_missing = wb.create_sheet("Missing SMILES")
-    missing_headers = [
-        "source_paper", "molecule_id", "name_as_written", "normalized_name", "reason"
-    ]
-    ws_missing.append(missing_headers)
-
-    for mol in molecules_without_smiles:
-        reason = _infer_missing_smiles_reason(mol)
-        ws_missing.append([
-            mol.get("source_paper", ""),
-            mol.get("molecule_id", ""),
-            mol.get("name_as_written", ""),
-            mol.get("normalized_name", ""),
-            reason
-        ])
-
-    _apply_header_style(ws_missing)
-    _apply_data_style(ws_missing)
-    _auto_width(ws_missing)
-
-    # Apply yellow highlight to Missing SMILES rows
-    for row_idx, row in enumerate(ws_missing.iter_rows(min_row=2), start=2):
-        for cell in row:
-            cell.fill = NO_SMILES_FILL
-
-    # Save Excel
-    excel_path = output_dir / "unified_dataset.xlsx"
-    wb.save(excel_path)
-    files_created.append(str(excel_path))
-
-    # ========================================
-    # 2. Create analysis_ready.csv
-    # ========================================
-
-    # Build molecule lookup by (doc_id, molecule_id)
-    molecule_lookup = {}
-    for mol in molecules_with_smiles:
-        mol_id = mol.get("molecule_id")
-        doc_id = mol.get("doc_id")
-        if mol_id and doc_id:
-            key = f"{doc_id}:{mol_id}"
-            molecule_lookup[key] = mol
-
-    # Collect MIC and HC50 values per molecule
-    molecule_data = defaultdict(lambda: {
-        "MIC_S_aureus": None,
-        "MIC_E_coli": None,
-        "MIC_P_aeruginosa": None,
-        "MIC_C_albicans": None,
-        "HC50": None
-    })
-
-    for res in all_results:
-        doc_id = res.get("doc_id")
-        mol_id = res.get("molecule_id")
-        exp_id = res.get("experiment_id")
-        endpoint = (res.get("endpoint") or res.get("property_name") or "").upper()
-        value = res.get("value")
-
-        if not mol_id or not doc_id:
-            continue
-
-        mol_key = f"{doc_id}:{mol_id}"
-
-        # Check if this molecule has SMILES
-        if mol_key not in molecule_lookup:
-            continue
-
-        # Handle HC50
-        if "HC50" in endpoint or "HEMOLYSIS" in endpoint:
-            if value is not None:
-                try:
-                    molecule_data[mol_key]["HC50"] = float(value)
-                except (ValueError, TypeError):
-                    pass
-            continue
-
-        # Handle MIC values
-        if "MIC" in endpoint:
-            # Get organism from experiment
-            exp_key = f"{doc_id}:{exp_id}"
-            exp = experiment_lookup.get(exp_key, {})
-            organism = exp.get("organism", "")
-            normalized_org = _normalize_organism(organism)
-
-            if normalized_org and value is not None:
-                col_name = f"MIC_{normalized_org}"
-                if col_name in molecule_data[mol_key]:
-                    try:
-                        val = float(value)
-                        current = molecule_data[mol_key][col_name]
-                        # Keep minimum MIC value
-                        if current is None or val < current:
-                            molecule_data[mol_key][col_name] = val
-                    except (ValueError, TypeError):
-                        pass
-
-    # Write CSV
-    csv_path = output_dir / "analysis_ready.csv"
-    csv_headers = [
-        "molecule_id", "name", "smiles", "source_paper", "head_group_class",
-        "MIC_S_aureus", "MIC_E_coli", "MIC_P_aeruginosa", "MIC_C_albicans",
-        "HC50", "selectivity_index"
-    ]
-
-    with csv_path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerow(csv_headers)
-
-        for mol_key, mol in molecule_lookup.items():
-            data = molecule_data[mol_key]
-
-            # Calculate selectivity index
-            selectivity = None
-            hc50 = data["HC50"]
-            if hc50 is not None:
-                mic_values = [
-                    data["MIC_S_aureus"],
-                    data["MIC_E_coli"],
-                    data["MIC_P_aeruginosa"],
-                    data["MIC_C_albicans"]
-                ]
-                valid_mics = [v for v in mic_values if v is not None and v > 0]
-                if valid_mics:
-                    lowest_mic = min(valid_mics)
-                    selectivity = hc50 / lowest_mic
-
-            writer.writerow([
-                mol.get("molecule_id", ""),
-                mol.get("name_as_written", "") or mol.get("normalized_name", ""),
-                mol.get("smiles", ""),
-                mol.get("source_paper", ""),
-                mol.get("head_group_class", ""),
-                data["MIC_S_aureus"] if data["MIC_S_aureus"] is not None else "",
-                data["MIC_E_coli"] if data["MIC_E_coli"] is not None else "",
-                data["MIC_P_aeruginosa"] if data["MIC_P_aeruginosa"] is not None else "",
-                data["MIC_C_albicans"] if data["MIC_C_albicans"] is not None else "",
-                hc50 if hc50 is not None else "",
-                f"{selectivity:.2f}" if selectivity is not None else ""
-            ])
-
-    files_created.append(str(csv_path))
-
-    # ========================================
-    # 3. Create molecules.smi
-    # ========================================
-    smi_path = output_dir / "molecules.smi"
-
-    # Deduplicate by SMILES - keep first occurrence
-    seen_smiles = set()
-    with smi_path.open("w", encoding="utf-8") as f:
-        for mol in all_molecules:
-            smiles = mol.get("smiles", "")
-            if smiles and smiles not in seen_smiles:
-                seen_smiles.add(smiles)
-                mol_id = mol.get("molecule_id", "unknown")
-                f.write(f"{smiles}\t{mol_id}\n")
-
-    files_created.append(str(smi_path))
-
-    # Log completion
     stats = {
         "molecules_with_smiles": len(molecules_with_smiles),
         "molecules_without_smiles": len(molecules_without_smiles),
-        "unique_smiles": len(seen_smiles),
+        "unique_smiles": len(seen_smiles_for_count),
         "experiments": len(all_experiments),
         "results": len(all_results),
         "papers_processed": len(doc_ids)
     }
 
+    # ========================================
+    # 1. Create unified_dataset.xlsx
+    # ========================================
+    excel_path = output_dir / "unified_dataset.xlsx"
+    try:
+        wb = Workbook()
+        if "Sheet" in wb.sheetnames:
+            del wb["Sheet"]
+
+        # --- Sheet 1: Summary ---
+        ws_summary = wb.create_sheet("Summary", 0)
+        ws_summary.append(["Field", "Value"])
+        ws_summary.append(["Total molecules (with SMILES)", len(molecules_with_smiles)])
+        ws_summary.append(["Total molecules (without SMILES)", len(molecules_without_smiles)])
+        ws_summary.append(["Total experiments", len(all_experiments)])
+        ws_summary.append(["Total results", len(all_results)])
+        ws_summary.append(["Papers processed", ", ".join(source_papers.values())])
+
+        _apply_header_style(ws_summary, row=1)
+        _auto_width(ws_summary)
+
+        # --- Sheet 2: Molecules (WITH SMILES only, deduplicated) ---
+        ws_mol = wb.create_sheet("Molecules")
+        mol_headers = [
+            "source_paper", "molecule_id", "name_as_written", "normalized_name",
+            "smiles", "smiles_source", "smiles_confidence", "head_group_class",
+            "chain_lengths", "notes"
+        ]
+        ws_mol.append(mol_headers)
+
+        # Deduplicate by SMILES - combine source_papers
+        smiles_to_molecules = defaultdict(list)
+        for mol in molecules_with_smiles:
+            smiles = mol.get("smiles", "")
+            if smiles:
+                smiles_to_molecules[smiles].append(mol)
+
+        for smiles, mols in smiles_to_molecules.items():
+            # Combine source papers
+            sources = sorted(set(m.get("source_paper", "") for m in mols))
+            combined_source = ", ".join(s for s in sources if s)
+
+            # Use first molecule as representative
+            mol = mols[0]
+            ws_mol.append(_sanitize_row([
+                combined_source,
+                mol.get("molecule_id", ""),
+                mol.get("name_as_written", ""),
+                mol.get("normalized_name", ""),
+                smiles,
+                mol.get("smiles_source", ""),
+                mol.get("smiles_confidence", ""),
+                mol.get("head_group_class", ""),
+                mol.get("chain_lengths"),
+                mol.get("notes", "")
+            ]))
+
+        _apply_header_style(ws_mol)
+        _apply_data_style(ws_mol)
+        _auto_width(ws_mol)
+
+        # --- Sheet 3: Experiments ---
+        ws_exp = wb.create_sheet("Experiments")
+        exp_headers = [
+            "source_paper", "experiment_id", "organism", "strain", "assay_type",
+            "conditions", "exposure_protocol", "notes"
+        ]
+        ws_exp.append(exp_headers)
+
+        for exp in all_experiments:
+            ws_exp.append(_sanitize_row([
+                exp.get("source_paper", ""),
+                exp.get("experiment_id", ""),
+                exp.get("organism", ""),
+                exp.get("strain", ""),
+                exp.get("assay_type", "") or exp.get("type", ""),
+                exp.get("conditions"),
+                exp.get("exposure_protocol", ""),
+                exp.get("notes", "")
+            ]))
+
+        _apply_header_style(ws_exp)
+        _apply_data_style(ws_exp)
+        _auto_width(ws_exp)
+
+        # --- Sheet 4: Results ---
+        ws_res = wb.create_sheet("Results")
+        res_headers = [
+            "source_paper", "result_id", "molecule_id", "experiment_id",
+            "endpoint", "value", "units", "directionality", "confidence", "notes"
+        ]
+        ws_res.append(res_headers)
+
+        for res in all_results:
+            ws_res.append(_sanitize_row([
+                res.get("source_paper", ""),
+                res.get("result_id", ""),
+                res.get("molecule_id", ""),
+                res.get("experiment_id", ""),
+                res.get("endpoint", "") or res.get("property_name", ""),
+                res.get("value", ""),
+                res.get("units", "") or res.get("unit", ""),
+                res.get("directionality", ""),
+                res.get("confidence", ""),
+                res.get("notes", "")
+            ]))
+
+        _apply_header_style(ws_res)
+        _apply_data_style(ws_res)
+        _auto_width(ws_res)
+
+        # --- Sheet 5: Missing SMILES ---
+        ws_missing = wb.create_sheet("Missing SMILES")
+        missing_headers = [
+            "source_paper", "molecule_id", "name_as_written", "normalized_name", "reason"
+        ]
+        ws_missing.append(missing_headers)
+
+        for mol in molecules_without_smiles:
+            reason = _infer_missing_smiles_reason(mol)
+            ws_missing.append(_sanitize_row([
+                mol.get("source_paper", ""),
+                mol.get("molecule_id", ""),
+                mol.get("name_as_written", ""),
+                mol.get("normalized_name", ""),
+                reason
+            ]))
+
+        _apply_header_style(ws_missing)
+        _apply_data_style(ws_missing)
+        _auto_width(ws_missing)
+
+        # Apply yellow highlight to Missing SMILES rows
+        for row_idx, row in enumerate(ws_missing.iter_rows(min_row=2), start=2):
+            for cell in row:
+                cell.fill = NO_SMILES_FILL
+
+        # Save Excel
+        wb.save(excel_path)
+        files_created.append(str(excel_path))
+    except Exception as e:
+        error_msg = f"Excel export failed: {e}"
+        errors.append(error_msg)
+        if logger:
+            logger.log_warning(error_msg, stage="Merge Exports")
+
+    # ========================================
+    # 2. Create analysis_ready.csv
+    # ========================================
+    csv_path = output_dir / "analysis_ready.csv"
+    try:
+        # Build molecule lookup by (doc_id, molecule_id)
+        molecule_lookup = {}
+        for mol in molecules_with_smiles:
+            mol_id = mol.get("molecule_id")
+            doc_id = mol.get("doc_id")
+            if mol_id and doc_id:
+                key = f"{doc_id}:{mol_id}"
+                molecule_lookup[key] = mol
+
+        # Collect MIC and HC50 values per molecule
+        molecule_data = defaultdict(lambda: {
+            "MIC_S_aureus": None,
+            "MIC_E_coli": None,
+            "MIC_P_aeruginosa": None,
+            "MIC_C_albicans": None,
+            "HC50": None
+        })
+
+        for res in all_results:
+            doc_id = res.get("doc_id")
+            mol_id = res.get("molecule_id")
+            exp_id = res.get("experiment_id")
+            endpoint_val = res.get("endpoint") or res.get("property_name") or ""
+            # Handle dict endpoints
+            if isinstance(endpoint_val, dict):
+                endpoint_val = endpoint_val.get("description", "") or str(endpoint_val)
+            endpoint = str(endpoint_val).upper()
+            value = res.get("value")
+
+            if not mol_id or not doc_id:
+                continue
+
+            mol_key = f"{doc_id}:{mol_id}"
+
+            # Check if this molecule has SMILES
+            if mol_key not in molecule_lookup:
+                continue
+
+            # Handle HC50
+            if "HC50" in endpoint or "HEMOLYSIS" in endpoint:
+                if value is not None:
+                    try:
+                        molecule_data[mol_key]["HC50"] = float(value)
+                    except (ValueError, TypeError):
+                        pass
+                continue
+
+            # Handle MIC values
+            if "MIC" in endpoint:
+                # Get organism from experiment
+                exp_key = f"{doc_id}:{exp_id}"
+                exp = experiment_lookup.get(exp_key, {})
+                organism = exp.get("organism", "")
+                normalized_org = _normalize_organism(organism)
+
+                if normalized_org and value is not None:
+                    col_name = f"MIC_{normalized_org}"
+                    if col_name in molecule_data[mol_key]:
+                        try:
+                            val = float(value)
+                            current = molecule_data[mol_key][col_name]
+                            # Keep minimum MIC value
+                            if current is None or val < current:
+                                molecule_data[mol_key][col_name] = val
+                        except (ValueError, TypeError):
+                            pass
+
+        # Write CSV
+        csv_headers = [
+            "molecule_id", "name", "smiles", "source_paper", "head_group_class",
+            "MIC_S_aureus", "MIC_E_coli", "MIC_P_aeruginosa", "MIC_C_albicans",
+            "HC50", "selectivity_index"
+        ]
+
+        with csv_path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(csv_headers)
+
+            for mol_key, mol in molecule_lookup.items():
+                data = molecule_data[mol_key]
+
+                # Calculate selectivity index
+                selectivity = None
+                hc50 = data["HC50"]
+                if hc50 is not None:
+                    mic_values = [
+                        data["MIC_S_aureus"],
+                        data["MIC_E_coli"],
+                        data["MIC_P_aeruginosa"],
+                        data["MIC_C_albicans"]
+                    ]
+                    valid_mics = [v for v in mic_values if v is not None and v > 0]
+                    if valid_mics:
+                        lowest_mic = min(valid_mics)
+                        selectivity = hc50 / lowest_mic
+
+                writer.writerow([
+                    mol.get("molecule_id", ""),
+                    mol.get("name_as_written", "") or mol.get("normalized_name", ""),
+                    mol.get("smiles", ""),
+                    mol.get("source_paper", ""),
+                    _sanitize_cell(mol.get("head_group_class", "")),
+                    data["MIC_S_aureus"] if data["MIC_S_aureus"] is not None else "",
+                    data["MIC_E_coli"] if data["MIC_E_coli"] is not None else "",
+                    data["MIC_P_aeruginosa"] if data["MIC_P_aeruginosa"] is not None else "",
+                    data["MIC_C_albicans"] if data["MIC_C_albicans"] is not None else "",
+                    hc50 if hc50 is not None else "",
+                    f"{selectivity:.2f}" if selectivity is not None else ""
+                ])
+
+        files_created.append(str(csv_path))
+    except Exception as e:
+        error_msg = f"CSV export failed: {e}"
+        errors.append(error_msg)
+        if logger:
+            logger.log_warning(error_msg, stage="Merge Exports")
+
+    # ========================================
+    # 3. Create molecules.smi
+    # ========================================
+    smi_path = output_dir / "molecules.smi"
+    try:
+        # Deduplicate by SMILES - keep first occurrence
+        seen_smiles = set()
+        with smi_path.open("w", encoding="utf-8") as f:
+            for mol in all_molecules:
+                smiles = mol.get("smiles", "")
+                if smiles and smiles not in seen_smiles:
+                    seen_smiles.add(smiles)
+                    mol_id = mol.get("molecule_id", "unknown")
+                    f.write(f"{smiles}\t{mol_id}\n")
+
+        files_created.append(str(smi_path))
+    except Exception as e:
+        error_msg = f"SMI export failed: {e}"
+        errors.append(error_msg)
+        if logger:
+            logger.log_warning(error_msg, stage="Merge Exports")
+
+    # Log completion
+    status = "success" if not errors else "partial"
     if logger:
         logger.log_stage("Merge Exports", {
-            "status": "success",
+            "status": status,
             "files_created": files_created,
+            "errors": errors,
             "stats": stats
         })
         logger.emit_progress("MERGE", "end", stats=stats)
 
     return {
-        "status": "success",
+        "status": status,
         "files_created": files_created,
+        "errors": errors,
         "stats": stats,
-        "unified_excel": str(excel_path),
-        "analysis_csv": str(csv_path),
-        "smiles_file": str(smi_path)
+        "unified_excel": str(excel_path) if str(excel_path) in files_created else None,
+        "analysis_csv": str(csv_path) if str(csv_path) in files_created else None,
+        "smiles_file": str(smi_path) if str(smi_path) in files_created else None
     }
