@@ -399,38 +399,50 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
             if gemini_key and gap_model:
                 logger.emit_progress("GAP", "start", doc_index=doc_index, doc_total=doc_total)
                 stage_start = time.time()
-                gaps_json = run_gap_hunter(
-                    gemini_key=gemini_key, model=gap_model,
-                    paper_md=paper_md, extraction=extraction,
-                    bundle_dir=bundle_dir,
-                    logger=logger
-                )
-                gap_meta = gaps_json.pop("_meta", {})
-                stage_time = time.time() - stage_start
+                try:
+                    gaps_json = run_gap_hunter(
+                        gemini_key=gemini_key, model=gap_model,
+                        paper_md=paper_md, extraction=extraction,
+                        bundle_dir=bundle_dir,
+                        logger=logger
+                    )
+                    gap_meta = gaps_json.pop("_meta", {})
+                    stage_time = time.time() - stage_start
 
-                _write_bundle_file(bundle_dir, "gaps_gemini.json", gaps_json)
+                    _write_bundle_file(bundle_dir, "gaps_gemini.json", gaps_json)
 
-                logger.log_stage("Stage 6: Gemini Gap Hunt", {
-                    "status": "success",
-                    "time": stage_time,
-                    "gaps_identified": gap_meta.get("gaps_identified", 0),
-                    "gap_types": gap_meta.get("gap_types", {})
-                })
-                gaps_count = len(gaps_json.get("gaps") or [])
-                logger.emit_progress("GAP", "end", doc_index=doc_index, doc_total=doc_total,
-                                    stats={"gaps": gaps_count})
-
-                for g in gaps_json.get("gaps", []) or []:
-                    insert_gap(conn, {
-                        "suggestion_id": str(uuid.uuid4()),
-                        "doc_id": doc_id,
-                        "model": gap_model,
-                        "kind": g["kind"],
-                        "page": g.get("page"),
-                        "description": g["description"],
-                        "rationale": g.get("rationale"),
-                        "created_at": _utc_iso(),
+                    logger.log_stage("Stage 6: Gemini Gap Hunt", {
+                        "status": "success",
+                        "time": stage_time,
+                        "gaps_identified": gap_meta.get("gaps_identified", 0),
+                        "gap_types": gap_meta.get("gap_types", {})
                     })
+                    gaps_count = len(gaps_json.get("gaps") or [])
+                    logger.emit_progress("GAP", "end", doc_index=doc_index, doc_total=doc_total,
+                                        stats={"gaps": gaps_count})
+
+                    for g in gaps_json.get("gaps", []) or []:
+                        insert_gap(conn, {
+                            "suggestion_id": str(uuid.uuid4()),
+                            "doc_id": doc_id,
+                            "model": gap_model,
+                            "kind": g["kind"],
+                            "page": g.get("page"),
+                            "description": g["description"],
+                            "rationale": g.get("rationale"),
+                            "created_at": _utc_iso(),
+                        })
+                except Exception as e:
+                    stage_time = time.time() - stage_start
+                    logger.log_warning(f"Gap hunter failed: {e}, continuing without gaps", stage="Gemini Gap Hunt")
+                    logger.log_stage("Stage 6: Gemini Gap Hunt", {
+                        "status": "error",
+                        "time": stage_time,
+                        "error": str(e)
+                    })
+                    logger.emit_progress("GAP", "end", doc_index=doc_index, doc_total=doc_total,
+                                        stats={"gaps": 0})
+                    gaps_json = {"gaps": []}
             else:
                 logger.log_stage("Stage 6: Gemini Gap Hunt", {
                     "status": "skipped",
@@ -505,14 +517,19 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
 
                     # Re-run gap hunter
                     if gemini_key and gap_model:
-                        gaps_json = run_gap_hunter(
-                            gemini_key=gemini_key, model=gap_model,
-                            paper_md=paper_md, extraction=extraction,
-                            bundle_dir=bundle_dir,
-                            logger=logger
-                        )
-                        gaps_json.pop("_meta", None)
-                        _write_bundle_file(bundle_dir, f"gaps_after_round_{round_i+1}.json", gaps_json)
+                        try:
+                            gaps_json = run_gap_hunter(
+                                gemini_key=gemini_key, model=gap_model,
+                                paper_md=paper_md, extraction=extraction,
+                                bundle_dir=bundle_dir,
+                                logger=logger
+                            )
+                            gaps_json.pop("_meta", None)
+                            _write_bundle_file(bundle_dir, f"gaps_after_round_{round_i+1}.json", gaps_json)
+                        except Exception as e:
+                            logger.log_warning(f"Gap hunter (round {round_i+1}) failed: {e}, stopping gap resolution", stage="Gemini Gap Hunt")
+                            gaps_json = {"gaps": []}
+                            break  # Exit the gap resolution loop
 
             # Stage 9: SMILES Lookup
             logger.emit_progress("SMILES", "start", doc_index=doc_index, doc_total=doc_total)
