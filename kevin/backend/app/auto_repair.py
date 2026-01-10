@@ -33,6 +33,21 @@ def auto_repair(*, conn, doc_id: str, bundle_dir: Path, paper_md: str, extractio
     """
     start_time = time.time()
 
+    # Backup existing SMILES before repair
+    existing_smiles = {}
+    for mol in (extraction.get("molecules") or []):
+        mol_id = mol.get("molecule_id")
+        if mol_id and mol.get("smiles"):
+            existing_smiles[mol_id] = {
+                "smiles": mol.get("smiles"),
+                "smiles_source": mol.get("smiles_source"),
+                "smiles_valid": mol.get("smiles_valid"),
+                "smiles_confidence": mol.get("smiles_confidence")
+            }
+
+    if existing_smiles:
+        print(f"  [DEBUG auto_repair] Backing up SMILES for {len(existing_smiles)} molecules")
+
     idx = _index(extraction)
     applied = []
     failed = []
@@ -121,6 +136,24 @@ def auto_repair(*, conn, doc_id: str, bundle_dir: Path, paper_md: str, extractio
     repaired["molecules"] = list(idx["molecule"].values())
     repaired["experiments"] = list(idx["experiment"].values())
     repaired["results"] = list(idx["result"].values())
+
+    # Restore SMILES that may have been lost during repair
+    restored_count = 0
+    for mol in (repaired.get("molecules") or []):
+        mol_id = mol.get("molecule_id")
+        if mol_id in existing_smiles and not mol.get("smiles"):
+            smiles_data = existing_smiles[mol_id]
+            mol["smiles"] = smiles_data["smiles"]
+            mol["smiles_source"] = smiles_data.get("smiles_source")
+            mol["smiles_valid"] = smiles_data.get("smiles_valid")
+            mol["smiles_confidence"] = smiles_data.get("smiles_confidence")
+            restored_count += 1
+
+    if restored_count > 0:
+        print(f"  [DEBUG auto_repair] Restored SMILES for {restored_count} molecules")
+
+    final_smiles_count = sum(1 for m in repaired.get("molecules", []) if m.get("smiles"))
+    print(f"  [DEBUG auto_repair] After repair: {final_smiles_count} molecules have SMILES")
 
     elapsed = time.time() - start_time
 
