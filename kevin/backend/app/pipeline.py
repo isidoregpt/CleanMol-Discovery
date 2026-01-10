@@ -19,6 +19,7 @@ from .smiles_lookup import enrich_molecules_with_smiles
 from .figure_analysis import analyze_pdf_figures, match_figure_compounds_to_molecules
 from .smiles_validation import validate_and_enrich_smiles
 from .excel_export import create_review_workbook, export_combined_workbook
+from .merge_exports import merge_and_export_datasets
 from .logger import PipelineLogger
 
 
@@ -639,6 +640,9 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
             "papers_combined": len(all_extractions),
             "output_file": str(combined_excel_path)
         })
+
+    # Merge all JSONL exports into unified dataset files
+    merge_result = merge_and_export_datasets(out, logger=logger)
 
     # Compute total counts from all extractions
     total_molecules = sum(len(ext["extraction"].get("molecules") or []) for ext in all_extractions)
