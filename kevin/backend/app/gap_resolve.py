@@ -57,8 +57,21 @@ def _dedupe_by_id(items: List[dict], key: str) -> List[dict]:
 def merge_additions(extraction: dict, additions: dict) -> dict:
     """
     Merge additions into extraction, deduplicating by ID.
+    PRESERVES existing SMILES data when merging duplicates.
     Sanitizes foreign keys to null orphan references instead of creating placeholders.
     """
+    # Build lookup of existing molecules with their SMILES
+    existing_mol_smiles = {}
+    for mol in (extraction.get("molecules") or []):
+        mol_id = mol.get("molecule_id")
+        if mol_id and mol.get("smiles"):
+            existing_mol_smiles[mol_id] = {
+                "smiles": mol.get("smiles"),
+                "smiles_source": mol.get("smiles_source"),
+                "smiles_valid": mol.get("smiles_valid"),
+                "smiles_confidence": mol.get("smiles_confidence")
+            }
+
     merged = dict(extraction)
 
     merged_mols = (merged.get("molecules") or []) + (additions.get("molecules") or [])
@@ -68,6 +81,16 @@ def merge_additions(extraction: dict, additions: dict) -> dict:
     merged["molecules"] = _dedupe_by_id(merged_mols, "molecule_id")
     merged["experiments"] = _dedupe_by_id(merged_exps, "experiment_id")
     merged["results"] = _dedupe_by_id(merged_res, "result_id")
+
+    # RESTORE SMILES data that may have been lost during deduplication
+    for mol in merged["molecules"]:
+        mol_id = mol.get("molecule_id")
+        if mol_id in existing_mol_smiles and not mol.get("smiles"):
+            smiles_data = existing_mol_smiles[mol_id]
+            mol["smiles"] = smiles_data["smiles"]
+            mol["smiles_source"] = smiles_data.get("smiles_source")
+            mol["smiles_valid"] = smiles_data.get("smiles_valid")
+            mol["smiles_confidence"] = smiles_data.get("smiles_confidence")
 
     # Sanitize foreign keys to null orphan references instead of inventing placeholders
     merged = _sanitize_foreign_keys(merged)
