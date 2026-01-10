@@ -276,6 +276,7 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
                                 stats={"molecules": mol_count, "experiments": exp_count})
 
             # Match figure-extracted SMILES to Opus-extracted molecules
+            unmatched_figure_compounds = []
             if figure_compounds:
                 opus_molecules = extraction.get("molecules") or []
                 print(f"  [DEBUG] Figure matching input:")
@@ -284,12 +285,17 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
                 print(f"    - Figure compound names: {[c.get('name', '<no name>') for c in figure_compounds[:5]]}{'...' if len(figure_compounds) > 5 else ''}")
                 print(f"    - Opus molecule IDs: {[m.get('molecule_id', '<no id>') for m in opus_molecules[:5]]}{'...' if len(opus_molecules) > 5 else ''}")
 
-                molecules, matched_count = match_figure_compounds_to_molecules(
+                molecules, matched_count, unmatched_figure_compounds = match_figure_compounds_to_molecules(
                     figure_compounds,
                     opus_molecules,
                     bundle_dir=bundle_dir
                 )
                 extraction["molecules"] = molecules
+                # Store unmatched figure compounds for user review
+                if unmatched_figure_compounds:
+                    extraction["unmatched_figure_compounds"] = unmatched_figure_compounds
+                    print(f"  [INFO] {len(unmatched_figure_compounds)} figure compounds with SMILES did not match any molecule")
+
                 print(f"  [DEBUG pipeline:A] After figure match: {sum(1 for m in extraction.get('molecules', []) if m.get('smiles'))} have SMILES")
                 print(f"  [DEBUG] Figure matching result: {matched_count} matches")
                 if matched_count > 0:
