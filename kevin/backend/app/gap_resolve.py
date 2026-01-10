@@ -159,7 +159,7 @@ def resolve_gaps_with_targeted_opus(
             model=opus_model,
             system=TARGETED_SYSTEM,
             user=user,
-            max_tokens=8000,
+            max_tokens=16000,
             temperature=0.15,
         )
 

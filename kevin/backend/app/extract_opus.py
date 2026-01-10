@@ -23,7 +23,7 @@ def run_opus_extraction(*, anthropic_key: str, model: str, bundle_dir: Path,
 
     resp, api_meta = call_anthropic_messages(
         api_key=anthropic_key, model=model, system=OPUS_SYSTEM, user=user_prompt,
-        max_tokens=8192, temperature=0.2
+        max_tokens=16000, temperature=0.2
     )
 
     # Log API call if logger provided
