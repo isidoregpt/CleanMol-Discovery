@@ -290,13 +290,17 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
                     bundle_dir=bundle_dir
                 )
                 extraction["molecules"] = molecules
+                print(f"  [DEBUG pipeline:A] After figure match: {sum(1 for m in extraction.get('molecules', []) if m.get('smiles'))} have SMILES")
                 print(f"  [DEBUG] Figure matching result: {matched_count} matches")
                 if matched_count > 0:
                     print(f"  Matched {matched_count} figure-derived SMILES to molecules")
 
             _write_bundle_file(bundle_dir, "extraction_current.json", extraction)
+            print(f"  [DEBUG pipeline:B] After write_bundle: {sum(1 for m in extraction.get('molecules', []) if m.get('smiles'))} have SMILES")
             extraction = _sanitize_foreign_keys(extraction, logger)
+            print(f"  [DEBUG pipeline:C] After sanitize_fk: {sum(1 for m in extraction.get('molecules', []) if m.get('smiles'))} have SMILES")
             _upsert_extraction_into_db(conn, doc_id, extraction)
+            print(f"  [DEBUG pipeline:D] After db_upsert: {sum(1 for m in extraction.get('molecules', []) if m.get('smiles'))} have SMILES")
 
             # Stage 4: GPT Audit
             audit_json = None
@@ -432,6 +436,7 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
                     # Stage 7: Gap Resolution
                     logger.emit_progress("RESOLVE", "start", doc_index=doc_index, doc_total=doc_total)
                     stage_start = time.time()
+                    print(f"  [DEBUG pipeline:E] Before gap_resolve (round {round_i+1}): {sum(1 for m in extraction.get('molecules', []) if m.get('smiles'))} have SMILES")
                     resolve_out = resolve_gaps_with_targeted_opus(
                         anthropic_key=anthropic_key,
                         opus_model=primary_model,
@@ -444,10 +449,12 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
                     )
                     resolve_meta = resolve_out.get("_meta", {})
                     extraction = resolve_out["extraction"]
+                    print(f"  [DEBUG pipeline:F] After gap_resolve (round {round_i+1}): {sum(1 for m in extraction.get('molecules', []) if m.get('smiles'))} have SMILES")
                     stage_time = time.time() - stage_start
 
                     _write_bundle_file(bundle_dir, f"extraction_after_gap_round_{round_i+1}.json", extraction)
                     extraction = _sanitize_foreign_keys(extraction, logger)
+                    print(f"  [DEBUG pipeline:G] After gap sanitize_fk (round {round_i+1}): {sum(1 for m in extraction.get('molecules', []) if m.get('smiles'))} have SMILES")
                     _upsert_extraction_into_db(conn, doc_id, extraction)
 
                     logger.log_stage(f"Stage 7: Gap Resolution (Round {round_i+1})", {
