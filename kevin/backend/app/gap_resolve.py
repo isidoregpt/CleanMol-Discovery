@@ -72,6 +72,10 @@ def merge_additions(extraction: dict, additions: dict) -> dict:
                 "smiles_confidence": mol.get("smiles_confidence")
             }
 
+    # DEBUG: Show what we're preserving
+    if existing_mol_smiles:
+        print(f"  [DEBUG merge_additions] Backing up SMILES for {len(existing_mol_smiles)} molecules: {list(existing_mol_smiles.keys())}")
+
     merged = dict(extraction)
 
     merged_mols = (merged.get("molecules") or []) + (additions.get("molecules") or [])
@@ -83,6 +87,7 @@ def merge_additions(extraction: dict, additions: dict) -> dict:
     merged["results"] = _dedupe_by_id(merged_res, "result_id")
 
     # RESTORE SMILES data that may have been lost during deduplication
+    restored_count = 0
     for mol in merged["molecules"]:
         mol_id = mol.get("molecule_id")
         if mol_id in existing_mol_smiles and not mol.get("smiles"):
@@ -91,6 +96,11 @@ def merge_additions(extraction: dict, additions: dict) -> dict:
             mol["smiles_source"] = smiles_data.get("smiles_source")
             mol["smiles_valid"] = smiles_data.get("smiles_valid")
             mol["smiles_confidence"] = smiles_data.get("smiles_confidence")
+            restored_count += 1
+
+    # DEBUG: Show final SMILES count
+    final_smiles_count = sum(1 for m in merged["molecules"] if m.get("smiles"))
+    print(f"  [DEBUG merge_additions] After merge: {final_smiles_count} molecules have SMILES (restored {restored_count})")
 
     # Sanitize foreign keys to null orphan references instead of inventing placeholders
     merged = _sanitize_foreign_keys(merged)
@@ -116,6 +126,11 @@ def resolve_gaps_with_targeted_opus(
         dict with updated extraction and resolutions
     """
     start_time = time.time()
+
+    # DEBUG: Check if extraction has SMILES when we receive it
+    incoming_smiles = [(m.get("molecule_id"), m.get("smiles_source"))
+                       for m in (extraction.get("molecules") or []) if m.get("smiles")]
+    print(f"  [DEBUG resolve_gaps] Received extraction with {len(incoming_smiles)} molecules having SMILES: {[x[0] for x in incoming_smiles]}")
 
     gaps = (gaps_json.get("gaps") or [])
     actionable = [g for g in gaps if g.get("page") is not None][:max_targets]
@@ -173,6 +188,11 @@ def resolve_gaps_with_targeted_opus(
         resolutions.append({"gap": g, "notes": out.get("notes")})
 
     elapsed = time.time() - start_time
+
+    # DEBUG: Check SMILES count at the end
+    outgoing_smiles = [(m.get("molecule_id"), m.get("smiles_source"))
+                       for m in (updated.get("molecules") or []) if m.get("smiles")]
+    print(f"  [DEBUG resolve_gaps] Returning extraction with {len(outgoing_smiles)} molecules having SMILES: {[x[0] for x in outgoing_smiles]}")
 
     (bundle_dir / "gap_resolutions_opus.json").write_text(
         json.dumps({"resolutions": resolutions, "extraction_after_gap_resolution": updated}, indent=2, ensure_ascii=False),
