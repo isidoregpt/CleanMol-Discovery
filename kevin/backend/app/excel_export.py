@@ -197,6 +197,32 @@ def create_review_workbook(extraction: dict, paper_title: str = "Unknown") -> Wo
     _apply_data_style(ws_res)
     _auto_width(ws_res)
 
+    # === Unmatched Figure Compounds Sheet ===
+    unmatched = extraction.get("unmatched_figure_compounds") or []
+    if unmatched:
+        ws_unmatched = wb.create_sheet("Unmatched Figures")
+        unmatched_headers = [
+            "name", "smiles", "confidence", "page_num", "source", "notes",
+            "smiles_valid", "variant_of"
+        ]
+        ws_unmatched.append(unmatched_headers)
+
+        for compound in unmatched:
+            ws_unmatched.append([
+                compound.get("name", ""),
+                compound.get("smiles", ""),
+                compound.get("confidence", ""),
+                compound.get("page_num", ""),
+                compound.get("source", ""),
+                compound.get("notes", ""),
+                compound.get("smiles_valid", ""),
+                compound.get("variant_of", "")
+            ])
+
+        _apply_header_style(ws_unmatched)
+        _apply_data_style(ws_unmatched, highlight_orphans=False)
+        _auto_width(ws_unmatched)
+
     # === Summary Sheet (first position) ===
     ws_summary = wb.create_sheet("Summary", 0)
     ws_summary.append(["Paper Title", paper_title])
@@ -205,11 +231,16 @@ def create_review_workbook(extraction: dict, paper_title: str = "Unknown") -> Wo
     ws_summary.append(["Molecules", len(molecules)])
     ws_summary.append(["Experiments", len(experiments)])
     ws_summary.append(["Results", len(results)])
+    ws_summary.append(["Unmatched Figure Compounds", len(unmatched)])
     ws_summary.append([])
 
     # SMILES coverage
     with_smiles = sum(1 for m in molecules if m.get("smiles"))
     ws_summary.append(["SMILES Coverage", f"{with_smiles}/{len(molecules)}"])
+
+    # Figure-derived SMILES
+    figure_smiles = sum(1 for m in molecules if m.get("smiles_source") and "figure" in m.get("smiles_source", "").lower())
+    ws_summary.append(["Figure-derived SMILES", figure_smiles])
 
     # Orphan counts
     orphan_results = sum(1 for r in results if (r.get("_meta") or {}).get("orphan_experiment") or (r.get("_meta") or {}).get("orphan_molecule"))
@@ -248,6 +279,7 @@ def export_combined_workbook(
     all_molecules = []
     all_experiments = []
     all_results = []
+    all_unmatched = []
     paper_summaries = []
 
     for item in extractions:
@@ -257,6 +289,7 @@ def export_combined_workbook(
         molecules = extraction.get("molecules") or []
         experiments = extraction.get("experiments") or []
         results = extraction.get("results") or []
+        unmatched = extraction.get("unmatched_figure_compounds") or []
 
         # Add source paper to each record
         for mol in molecules:
@@ -271,13 +304,20 @@ def export_combined_workbook(
             res["source_paper"] = paper_title
             all_results.append(res)
 
+        for compound in unmatched:
+            compound["source_paper"] = paper_title
+            all_unmatched.append(compound)
+
         with_smiles = sum(1 for m in molecules if m.get("smiles"))
+        figure_smiles = sum(1 for m in molecules if m.get("smiles_source") and "figure" in m.get("smiles_source", "").lower())
         paper_summaries.append({
             "title": paper_title,
             "molecules": len(molecules),
             "experiments": len(experiments),
             "results": len(results),
-            "smiles_coverage": f"{with_smiles}/{len(molecules)}"
+            "smiles_coverage": f"{with_smiles}/{len(molecules)}",
+            "figure_smiles": figure_smiles,
+            "unmatched_figures": len(unmatched)
         })
 
     # === Summary Sheet ===
@@ -287,18 +327,19 @@ def export_combined_workbook(
     ws_summary.append(["Total Molecules", len(all_molecules)])
     ws_summary.append(["Total Experiments", len(all_experiments)])
     ws_summary.append(["Total Results", len(all_results)])
+    ws_summary.append(["Total Unmatched Figure Compounds", len(all_unmatched)])
     ws_summary.append(["Papers Processed", len(extractions)])
     ws_summary.append([])
-    ws_summary.append(["Paper", "Molecules", "Experiments", "Results", "SMILES Coverage"])
+    ws_summary.append(["Paper", "Molecules", "Experiments", "Results", "SMILES Coverage", "Figure SMILES", "Unmatched"])
 
     for ps in paper_summaries:
         ws_summary.append([
             ps["title"], ps["molecules"], ps["experiments"],
-            ps["results"], ps["smiles_coverage"]
+            ps["results"], ps["smiles_coverage"], ps.get("figure_smiles", 0), ps.get("unmatched_figures", 0)
         ])
 
     _apply_header_style(ws_summary, row=1)
-    _apply_header_style(ws_summary, row=8)
+    _apply_header_style(ws_summary, row=9)  # Header row moved down after adding unmatched count
     _auto_width(ws_summary)
 
     # === Molecules Sheet ===
@@ -392,6 +433,32 @@ def export_combined_workbook(
     _apply_header_style(ws_res)
     _apply_data_style(ws_res, highlight_orphans=False)
     _auto_width(ws_res)
+
+    # === Unmatched Figure Compounds Sheet ===
+    if all_unmatched:
+        ws_unmatched = wb.create_sheet("Unmatched Figures")
+        unmatched_headers = [
+            "source_paper", "name", "smiles", "confidence", "page_num",
+            "source", "notes", "smiles_valid", "variant_of"
+        ]
+        ws_unmatched.append(unmatched_headers)
+
+        for compound in all_unmatched:
+            ws_unmatched.append([
+                compound.get("source_paper", ""),
+                compound.get("name", ""),
+                compound.get("smiles", ""),
+                compound.get("confidence", ""),
+                compound.get("page_num", ""),
+                compound.get("source", ""),
+                compound.get("notes", ""),
+                compound.get("smiles_valid", ""),
+                compound.get("variant_of", "")
+            ])
+
+        _apply_header_style(ws_unmatched)
+        _apply_data_style(ws_unmatched, highlight_orphans=False)
+        _auto_width(ws_unmatched)
 
     # Save workbook
     output_path = Path(output_path)

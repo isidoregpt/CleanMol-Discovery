@@ -26,6 +26,18 @@ For EACH chemical structure visible in the image:
 3. **Generate** a valid SMILES string representing the structure
 4. **Assess** your confidence: high (clearly visible, simple structure), medium (complex but clear), low (partially obscured or very complex)
 
+**CRITICAL: Variable/Generic Structures**
+If a structure shows variable components (e.g., "n = 2, 3, 4, 5, 6", "R = Me, Et, Pr", "m,n = various values"):
+- Generate SEPARATE entries for EACH specific variant
+- Use specific names (e.g., "P2P-10,10", "P3P-10,10" NOT "PnP series" or "Compound (n=2-6)")
+- Generate complete SMILES with actual atoms for each variant (no variables like "n" in SMILES)
+- Include a "variant_of" field noting the parent structure
+
+Example: If structure shows "bis-phosphonium with n = 2, 3, 4, 5, 6, 8" for linker length:
+- Create 6 separate entries: one for n=2, one for n=3, etc.
+- Each with specific name like "P2P" (for n=2), "P3P" (for n=3)
+- Each with complete SMILES containing the actual linker carbons
+
 Important guidelines:
 - Quaternary ammonium (N+) should be written as [N+]
 - Quaternary phosphonium (P+) should be written as [P+]
@@ -37,7 +49,7 @@ Return ONLY valid JSON:
 {
   "figures_found": true,
   "compounds": [
-    {"name": "compound name", "smiles": "SMILES string", "confidence": "high|medium|low", "notes": "observations"}
+    {"name": "specific compound name", "smiles": "complete SMILES string", "confidence": "high|medium|low", "notes": "observations", "variant_of": "parent structure name if applicable"}
   ]
 }
 
@@ -368,6 +380,127 @@ def normalize_compound_name(name: str) -> str:
     return name
 
 
+def extract_scaffold_hints(name: str) -> dict:
+    """
+    Extract structural hints from a compound name for scaffold-based matching.
+
+    Returns dict with:
+        - scaffold_type: e.g., "phosphonium", "ammonium", "imidazolium"
+        - is_bis: bool - whether it's a bis/gemini structure
+        - linker_values: list of int - detected linker lengths (n values)
+        - tail_values: list of int - detected tail lengths
+        - has_range: bool - whether it specifies a range (n=2-6)
+    """
+    if not name:
+        return {}
+
+    name_lower = name.lower()
+    hints = {
+        "scaffold_type": None,
+        "is_bis": False,
+        "linker_values": [],
+        "tail_values": [],
+        "has_range": False,
+        "raw_name": name
+    }
+
+    # Detect scaffold type
+    if "phosphonium" in name_lower or name_lower.startswith("p") and "p" in name_lower[1:]:
+        hints["scaffold_type"] = "phosphonium"
+    elif "ammonium" in name_lower or "quat" in name_lower:
+        hints["scaffold_type"] = "ammonium"
+    elif "imidazolium" in name_lower:
+        hints["scaffold_type"] = "imidazolium"
+    elif "pyridinium" in name_lower:
+        hints["scaffold_type"] = "pyridinium"
+
+    # Detect bis/gemini structure
+    if "bis" in name_lower or "gemini" in name_lower or "twin" in name_lower:
+        hints["is_bis"] = True
+    # P2P, P3P patterns suggest bis-phosphonium
+    if re.search(r'p\d+p', name_lower):
+        hints["is_bis"] = True
+        hints["scaffold_type"] = "phosphonium"
+
+    # Extract linker values (n=X patterns)
+    # Match "n = 2, 3, 4, 5, 6, 8" or "n=2-6" or "n = 2 to 6"
+    range_match = re.search(r'n\s*=\s*(\d+)\s*(?:to|-)\s*(\d+)', name_lower)
+    if range_match:
+        start, end = int(range_match.group(1)), int(range_match.group(2))
+        hints["linker_values"] = list(range(start, end + 1))
+        hints["has_range"] = True
+
+    # Match "n = 2, 3, 4, 5, 6, 8" pattern
+    list_match = re.search(r'n\s*=\s*([\d,\s]+)', name_lower)
+    if list_match and not hints["linker_values"]:
+        values_str = list_match.group(1)
+        hints["linker_values"] = [int(v.strip()) for v in re.findall(r'\d+', values_str)]
+        if len(hints["linker_values"]) > 1:
+            hints["has_range"] = True
+
+    # Extract specific linker from name like "P2P" -> linker=2, "P3P" -> linker=3
+    pnp_match = re.search(r'p(\d+)p', name_lower)
+    if pnp_match:
+        hints["linker_values"] = [int(pnp_match.group(1))]
+
+    # Extract tail lengths from patterns like "10,10" or "-10-10" or "C10"
+    tail_match = re.findall(r'[\-,](\d{1,2})(?:[\-,](\d{1,2}))?', name_lower)
+    for match in tail_match:
+        for v in match:
+            if v and int(v) >= 6:  # Tail lengths are typically 6+
+                hints["tail_values"].append(int(v))
+
+    return hints
+
+
+def scaffold_match_score(figure_hints: dict, mol_hints: dict) -> tuple:
+    """
+    Calculate a match score between figure compound and molecule based on scaffold hints.
+
+    Returns (score, reason) where:
+        - score: 0 (no match), 1 (weak), 2 (medium), 3 (strong)
+        - reason: explanation string
+    """
+    if not figure_hints or not mol_hints:
+        return 0, "missing hints"
+
+    score = 0
+    reasons = []
+
+    # Check scaffold type match
+    if figure_hints.get("scaffold_type") and mol_hints.get("scaffold_type"):
+        if figure_hints["scaffold_type"] == mol_hints["scaffold_type"]:
+            score += 1
+            reasons.append(f"same scaffold ({figure_hints['scaffold_type']})")
+        else:
+            return 0, "scaffold mismatch"
+
+    # Check bis/gemini match
+    if figure_hints.get("is_bis") == mol_hints.get("is_bis"):
+        if figure_hints.get("is_bis"):
+            score += 1
+            reasons.append("both bis-structure")
+
+    # Check if molecule's linker is within figure's range
+    fig_linkers = figure_hints.get("linker_values", [])
+    mol_linkers = mol_hints.get("linker_values", [])
+
+    if fig_linkers and mol_linkers:
+        mol_linker = mol_linkers[0] if mol_linkers else None
+        if mol_linker and mol_linker in fig_linkers:
+            score += 1
+            reasons.append(f"linker {mol_linker} in range {fig_linkers}")
+
+    # Check tail length compatibility
+    fig_tails = set(figure_hints.get("tail_values", []))
+    mol_tails = set(mol_hints.get("tail_values", []))
+    if fig_tails and mol_tails and fig_tails & mol_tails:
+        score += 1
+        reasons.append(f"matching tails {fig_tails & mol_tails}")
+
+    return score, "; ".join(reasons) if reasons else "no match criteria met"
+
+
 def _save_debug_log(bundle_dir, debug_lines: list):
     """Save debug log to bundle directory."""
     if bundle_dir:
@@ -387,19 +520,28 @@ def match_figure_compounds_to_molecules(
     """
     Match figure-extracted SMILES to Opus-extracted molecules by name/code.
 
+    Uses three matching strategies:
+    1. Exact name matching (case-insensitive)
+    2. Normalized name matching (removes separators, etc.)
+    3. Scaffold-based fuzzy matching (for generic/variable structures)
+
     Args:
         figure_compounds: List of compounds from figure extraction
         extracted_molecules: List of molecules from Opus extraction
         bundle_dir: Optional path to bundle directory for debug log output
 
     Returns:
-        Tuple of (updated_molecules, match_count)
+        Tuple of (updated_molecules, match_count, unmatched_figure_compounds)
     """
     debug_lines = []
     debug_lines.append("=" * 80)
     debug_lines.append("FIGURE-TO-MOLECULE SMILES MATCHING DEBUG LOG")
     debug_lines.append("=" * 80)
     debug_lines.append("")
+
+    # Track which figure compounds get matched
+    matched_figure_indices = set()
+    unmatched_figure_compounds = []
 
     # Log input counts
     debug_lines.append(f"INPUT SUMMARY:")
@@ -412,7 +554,13 @@ def match_figure_compounds_to_molecules(
         debug_lines.append(f"  - figure_compounds is {'empty/None' if not figure_compounds else 'valid'}")
         debug_lines.append(f"  - extracted_molecules is {'empty/None' if not extracted_molecules else 'valid'}")
         _save_debug_log(bundle_dir, debug_lines)
-        return extracted_molecules, 0
+        # Return all figure compounds as unmatched if we have them but no molecules
+        if figure_compounds:
+            for compound in figure_compounds:
+                if compound.get("smiles"):
+                    compound["matched"] = False
+                    unmatched_figure_compounds.append(compound)
+        return extracted_molecules, 0, unmatched_figure_compounds
 
     matched = 0
 
@@ -432,15 +580,19 @@ def match_figure_compounds_to_molecules(
     # Build lookup from figure compounds - index by both exact and normalized names
     figure_lookup_exact = {}
     figure_lookup_normalized = {}
+    figure_with_smiles = []  # Track compounds with SMILES for scaffold matching
 
     debug_lines.append("BUILDING LOOKUP TABLES:")
     debug_lines.append("-" * 40)
 
-    for compound in figure_compounds:
+    for idx, compound in enumerate(figure_compounds):
         # Only require SMILES, not validation (validation may have been skipped)
         if not compound.get("smiles"):
             debug_lines.append(f"  SKIP (no SMILES): {compound.get('name', '<no name>')}")
             continue
+
+        compound["_idx"] = idx  # Track original index
+        figure_with_smiles.append(compound)
 
         name = compound.get("name") or ""
         if name:
@@ -467,6 +619,12 @@ def match_figure_compounds_to_molecules(
     debug_lines.append("")
 
     print(f"    Figure lookup: {len(figure_lookup_exact)} exact keys, {len(figure_lookup_normalized)} normalized keys")
+
+    # Pre-compute scaffold hints for all figure compounds (for fallback matching)
+    figure_hints_list = []
+    for compound in figure_with_smiles:
+        hints = extract_scaffold_hints(compound.get("name", ""))
+        figure_hints_list.append((compound, hints))
 
     # Log all extracted molecules and their matching attempts
     debug_lines.append("MOLECULE MATCHING ATTEMPTS:")
@@ -515,6 +673,7 @@ def match_figure_compounds_to_molecules(
                 mol["smiles_confidence"] = compound.get("confidence", "medium")
                 mol["smiles_valid"] = compound.get("smiles_valid", True)
                 matched += 1
+                matched_figure_indices.add(compound.get("_idx"))
                 debug_lines.append(f"    RESULT: ✓ MATCHED (exact) -> {mol['smiles'][:50]}...")
                 print(f"    ✓ Matched (exact): {val} -> {mol['smiles'][:50]}...")
                 found = True
@@ -531,22 +690,84 @@ def match_figure_compounds_to_molecules(
                 mol["smiles_confidence"] = compound.get("confidence", "medium")
                 mol["smiles_valid"] = compound.get("smiles_valid", True)
                 matched += 1
+                matched_figure_indices.add(compound.get("_idx"))
                 debug_lines.append(f"    RESULT: ✓ MATCHED (normalized) -> {mol['smiles'][:50]}...")
                 print(f"    ✓ Matched (normalized): {val} -> {mol['smiles'][:50]}...")
                 found = True
                 break
 
+        # FALLBACK: Try scaffold-based fuzzy matching
+        if not found:
+            mol_hints = extract_scaffold_hints(mol_id)
+            # Also try name_as_written for hints
+            if not mol_hints.get("scaffold_type"):
+                mol_hints = extract_scaffold_hints(name_written)
+
+            best_score = 0
+            best_compound = None
+            best_reason = ""
+
+            for compound, fig_hints in figure_hints_list:
+                # Only consider compounds with range/variable structures for fuzzy matching
+                if not fig_hints.get("has_range"):
+                    continue
+
+                score, reason = scaffold_match_score(fig_hints, mol_hints)
+                if score >= 2 and score > best_score:  # Require at least score 2
+                    best_score = score
+                    best_compound = compound
+                    best_reason = reason
+
+            if best_compound:
+                mol["smiles"] = best_compound["smiles"]
+                mol["smiles_source"] = best_compound.get("source", "figure_extraction") + "_inferred"
+                mol["smiles_confidence"] = "inferred"
+                mol["smiles_valid"] = best_compound.get("smiles_valid", True)
+                mol["smiles_match_reason"] = best_reason
+                matched += 1
+                matched_figure_indices.add(best_compound.get("_idx"))
+                debug_lines.append(f"    RESULT: ✓ MATCHED (scaffold, score={best_score}) -> {mol['smiles'][:50]}...")
+                debug_lines.append(f"             Reason: {best_reason}")
+                print(f"    ✓ Matched (scaffold): {mol_id} -> {mol['smiles'][:50]}... ({best_reason})")
+                found = True
+
         if not found:
             debug_lines.append(f"    RESULT: ✗ NO MATCH")
 
+    # Collect unmatched figure compounds
+    debug_lines.append("")
+    debug_lines.append("UNMATCHED FIGURE COMPOUNDS:")
+    debug_lines.append("-" * 40)
+
+    for idx, compound in enumerate(figure_compounds):
+        if compound.get("smiles") and idx not in matched_figure_indices:
+            compound_copy = dict(compound)
+            compound_copy["matched"] = False
+            if "_idx" in compound_copy:
+                del compound_copy["_idx"]
+            unmatched_figure_compounds.append(compound_copy)
+            debug_lines.append(f"  [{idx+1}] {compound.get('name', '<no name>')} - SMILES available but no molecule match")
+
+    if not unmatched_figure_compounds:
+        debug_lines.append("  (none - all figure compounds matched)")
+
     debug_lines.append("")
     debug_lines.append("=" * 80)
-    debug_lines.append(f"FINAL RESULT: {matched} molecules matched with figure-derived SMILES")
+    debug_lines.append(f"FINAL RESULT:")
+    debug_lines.append(f"  - Molecules matched with figure-derived SMILES: {matched}")
+    debug_lines.append(f"  - Unmatched figure compounds (with SMILES): {len(unmatched_figure_compounds)}")
     debug_lines.append("=" * 80)
 
     print(f"    Total matched: {matched} molecules with figure-derived SMILES")
+    if unmatched_figure_compounds:
+        print(f"    Unmatched figure compounds: {len(unmatched_figure_compounds)}")
 
     # Save debug log
     _save_debug_log(bundle_dir, debug_lines)
 
-    return extracted_molecules, matched
+    # Clean up _idx from compounds
+    for compound in figure_compounds:
+        if "_idx" in compound:
+            del compound["_idx"]
+
+    return extracted_molecules, matched, unmatched_figure_compounds
