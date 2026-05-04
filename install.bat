@@ -10,8 +10,7 @@ echo.
 
 :: Store the root directory FIRST
 set ROOT_DIR=%cd%
-set APP_FOLDER=kev
-set APP_FOLDER=%APP_FOLDER%in
+set APP_FOLDER=cleanmol
 
 :: Check for Python
 echo [1/8] Checking for Python...

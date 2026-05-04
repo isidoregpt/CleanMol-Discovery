@@ -10,8 +10,7 @@ echo.
 
 :: Store the root directory
 set ROOT_DIR=%cd%
-set APP_FOLDER=kev
-set APP_FOLDER=%APP_FOLDER%in
+set APP_FOLDER=cleanmol
 
 :: Check if installation has been done
 if not exist "%ROOT_DIR%\%APP_FOLDER%\backend\.venv" (
