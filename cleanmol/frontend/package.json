@@ -1,6 +1,7 @@
 {
   "name": "cleanmol-frontend",
   "private": true,
+  "license": "AGPL-3.0-only",
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",

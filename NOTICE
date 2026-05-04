@@ -1,0 +1,17 @@
+CleanMol Discovery
+Copyright (C) 2026 Jonathan Graziola
+
+CleanMol Discovery is licensed under the GNU Affero General Public License
+version 3 only. See LICENSE.
+
+This repository's license covers the CleanMol Discovery source code authored
+for this project. Third-party models, datasets, APIs, papers, chemical
+databases, pretrained weights, and generated candidate data may be subject to
+their own licenses, access rules, citation requirements, safety policies, or
+terms of service. Users are responsible for reviewing and complying with those
+separate terms before redistribution, commercial use, model training, lab work,
+or publication.
+
+The project is intended to help researchers discover and evaluate candidate
+disinfectant molecules. It does not provide medical, regulatory, manufacturing,
+or lab-safety approval.

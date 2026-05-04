@@ -45,3 +45,14 @@ The Dataset Quality Equalizer applies the same gates to uploaded and auto-create
 Curated-Grade, Strong Starter, Useful Starter, or Not Ready.
 
 See the strategy, automated discovery, and FairChem/UMA notes in the app docs folder.
+
+## License
+
+CleanMol Discovery is licensed under the GNU Affero General Public License v3.0 only (`AGPL-3.0-only`).
+
+That license allows use, modification, distribution, and resale, but redistributed or network-hosted modified versions
+must provide corresponding source code under the same license. This is intentional: the project is meant to stay usable
+by under-resourced researchers, not disappear into closed repackaged products.
+
+The CleanMol Discovery and CleanMol names are not licensed for misleading resale, endorsement, or branding of forks.
+See `TRADEMARKS.md` and `NOTICE`.

@@ -1129,6 +1129,15 @@ export default function Page() {
             <span>â€¢</span>
             <span>Multi-Model Chemistry Dataset Builder</span>
             <span>â€¢</span>
+            <a
+              href="https://github.com/isidoregpt/CleanMol-Discovery"
+              target="_blank"
+              rel="noreferrer"
+              className="text-cyan-300/70 hover:text-cyan-200 transition"
+            >
+              Source / AGPL-3.0
+            </a>
+            <span>â€¢</span>
             <span>2026</span>
           </div>
         </footer>
