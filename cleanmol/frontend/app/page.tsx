@@ -23,7 +23,7 @@ const FALLBACK_MODEL_DEFAULTS: ModelBundle = {
   primary: "claude-opus-4-7",
   auditor: "gpt-5.5",
   gapHunter: "gemini-3.1-pro-preview",
-  figure: "claude-sonnet-4-6"
+  figure: "claude-opus-4-7"
 };
 
 const FALLBACK_MODEL_DEFAULTS_LAST_VERIFIED = "2026-05-04";

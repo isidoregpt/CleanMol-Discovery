@@ -11,7 +11,7 @@ DEFAULT_MODELS: Dict[str, str] = {
     "primary": "claude-opus-4-7",
     "auditor": "gpt-5.5",
     "gapHunter": "gemini-3.1-pro-preview",
-    "figure": "claude-sonnet-4-6",
+    "figure": "claude-opus-4-7",
 }
 
 MODEL_DEFAULTS_LAST_VERIFIED = "2026-05-04"
@@ -34,6 +34,7 @@ LEGACY_MODEL_ALIASES: Dict[str, str] = {
     "claude-opus-4-5-20251101": DEFAULT_MODELS["primary"],
     "claude-opus-4-20250514": DEFAULT_MODELS["primary"],
     "claude-opus-4-1-20250805": DEFAULT_MODELS["primary"],
+    "claude-sonnet-4-6": DEFAULT_MODELS["figure"],
     "claude-sonnet-4-5-20250929": DEFAULT_MODELS["figure"],
     "gpt-5.2": DEFAULT_MODELS["auditor"],
     "gpt-5.2-thinking": DEFAULT_MODELS["auditor"],
@@ -109,13 +110,35 @@ def _clean_gemini_name(model: Mapping[str, Any]) -> str:
     return value.strip()
 
 
-def _select_anthropic_family(models: Sequence[Mapping[str, Any]], family: str) -> Optional[str]:
-    family_token = f"claude-{family}"
+def _anthropic_family_rank(model_id: str) -> int:
+    lowered = model_id.lower()
+    if "mythos" in lowered:
+        return 4
+    if "opus" in lowered:
+        return 3
+    if "sonnet" in lowered:
+        return 2
+    if "haiku" in lowered:
+        return 1
+    return 0
+
+
+def _select_anthropic_frontier(models: Sequence[Mapping[str, Any]]) -> Optional[str]:
+    candidates = []
     for model in models:
         model_id = str(model.get("id") or "").strip()
-        if family_token in model_id.lower():
-            return model_id
-    return None
+        if model_id.lower().startswith("claude-"):
+            candidates.append(model)
+
+    if not candidates:
+        return None
+
+    def sort_key(model: Mapping[str, Any]) -> tuple[int, tuple[int, ...], str]:
+        model_id = str(model.get("id") or "").strip()
+        created_at = str(model.get("created_at") or "")
+        return (_anthropic_family_rank(model_id), _version_tuple(model_id), created_at)
+
+    return str(max(candidates, key=sort_key).get("id") or "").strip() or None
 
 
 def _select_openai_frontier(models: Sequence[Mapping[str, Any]]) -> Optional[str]:
@@ -204,8 +227,8 @@ def resolve_latest_model_defaults(
             )
             response.raise_for_status()
             available = response.json().get("data") or []
-            primary = _select_anthropic_family(available, "opus")
-            figure = _select_anthropic_family(available, "sonnet")
+            primary = _select_anthropic_frontier(available)
+            figure = primary
             if primary:
                 models["primary"] = primary
                 resolution["primary"] = {
@@ -213,10 +236,10 @@ def resolve_latest_model_defaults(
                     "model": primary,
                     "status": "resolved",
                     "source": PROVIDER_MODEL_API_URLS["anthropic"],
-                    "selection": "newest listed claude-opus model",
+                    "selection": "highest-ranked available Claude frontier model",
                 }
             else:
-                resolution["primary"] = _fallback_resolution("anthropic", models["primary"], "fallback", "No Opus model found in provider response.")
+                resolution["primary"] = _fallback_resolution("anthropic", models["primary"], "fallback", "No Claude frontier model found in provider response.")
             if figure:
                 models["figure"] = figure
                 resolution["figure"] = {
@@ -224,10 +247,10 @@ def resolve_latest_model_defaults(
                     "model": figure,
                     "status": "resolved",
                     "source": PROVIDER_MODEL_API_URLS["anthropic"],
-                    "selection": "newest listed claude-sonnet model",
+                    "selection": "same Anthropic frontier model as primary extraction",
                 }
             else:
-                resolution["figure"] = _fallback_resolution("anthropic", models["figure"], "fallback", "No Sonnet model found in provider response.")
+                resolution["figure"] = _fallback_resolution("anthropic", models["figure"], "fallback", "No Claude frontier model found in provider response.")
         except requests.RequestException as exc:
             reason = _safe_reason(exc)
             resolution["primary"] = _fallback_resolution("anthropic", models["primary"], "fallback", reason)

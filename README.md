@@ -75,7 +75,7 @@ If a key is missing, a provider cannot be reached, or a suitable frontier model 
 | Role | Verified fallback |
 | --- | --- |
 | Primary extraction and repair | `claude-opus-4-7` |
-| Figure analysis | `claude-sonnet-4-6` |
+| Figure analysis | `claude-opus-4-7` |
 | Audit | `gpt-5.5` |
 | Gap hunt | `gemini-3.1-pro-preview` |
 

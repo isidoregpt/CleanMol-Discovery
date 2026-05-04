@@ -28,7 +28,7 @@ The backend is the source of truth for model defaults. The app defaults to the l
 | Role | Default model | Why |
 | --- | --- | --- |
 | Primary extraction and repair | `claude-opus-4-7` | Strong long-context chemistry/literature reasoning |
-| Figure analysis | `claude-sonnet-4-6` | Faster multimodal structure extraction |
+| Figure analysis | `claude-opus-4-7` | Latest Anthropic frontier model for multimodal structure extraction |
 | Audit | `gpt-5.5` | Strong reasoning and citation verification via the OpenAI Responses API |
 | Gap hunt | `gemini-3.1-pro-preview` | Long-context coverage checks over full papers |
 
