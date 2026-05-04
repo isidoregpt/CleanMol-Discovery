@@ -44,9 +44,24 @@ start "CleanMol Backend" cmd /k "cd /d "%ROOT_DIR%\%APP_FOLDER%\backend" && call
 echo Waiting for backend to initialize...
 timeout /t 3 /nobreak >nul
 
+:: Pick the first available frontend port.
+set FRONTEND_PORT=3000
+for /l %%p in (3000,1,3024) do (
+    netstat -aon | findstr ":%%p" | findstr "LISTENING" >nul
+    if errorlevel 1 (
+        set FRONTEND_PORT=%%p
+        goto :frontend_port_found
+    )
+)
+echo ERROR: No available frontend port found from 3000 to 3024.
+pause
+exit /b 1
+
+:frontend_port_found
+
 :: Start frontend server in a new window
-echo Starting frontend server on http://localhost:3000 ...
-start "CleanMol Frontend" cmd /k "cd /d "%ROOT_DIR%\%APP_FOLDER%\frontend" && npm run dev"
+echo Starting frontend server on http://localhost:%FRONTEND_PORT% ...
+start "CleanMol Frontend" cmd /k "cd /d ""%ROOT_DIR%\%APP_FOLDER%\frontend"" && set CLEANMOL_FRONTEND_PORT=%FRONTEND_PORT% && npm run dev"
 
 :: Wait for frontend to initialize
 echo Waiting for frontend to initialize...
@@ -55,7 +70,7 @@ timeout /t 5 /nobreak >nul
 :: Open browser
 echo.
 echo Opening browser...
-start http://localhost:3000
+start http://localhost:%FRONTEND_PORT%
 
 echo.
 echo ============================================================
@@ -63,7 +78,7 @@ echo    CleanMol Discovery IS RUNNING
 echo ============================================================
 echo.
 echo    Backend:  http://localhost:8787
-echo    Frontend: http://localhost:3000 (opens automatically)
+echo    Frontend: http://localhost:%FRONTEND_PORT% (opens automatically)
 echo.
 echo    Two terminal windows have opened:
 echo    - "CleanMol Backend" - Python FastAPI server

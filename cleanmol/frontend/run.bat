@@ -6,5 +6,5 @@ if not exist node_modules (
     npm install
 )
 
-echo Starting dev server on http://localhost:3000
+echo Starting dev server on the first available port from http://localhost:3000
 npm run dev
