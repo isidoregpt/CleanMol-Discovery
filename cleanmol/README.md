@@ -1,6 +1,6 @@
 ﻿# CleanMol Discovery - Chemistry Dataset Builder
 
-CleanMol is a Windows-first desktop application for extracting structured chemistry datasets from born-digital PDFs. It turns papers and patents into auditable records for molecules, experiments, numeric results, evidence snippets, SMILES enrichment, and review workbooks.
+CleanMol is a desktop application for Windows and Apple Silicon / M-Series Macs. It extracts structured chemistry datasets from born-digital PDFs and turns papers and patents into auditable records for molecules, experiments, numeric results, evidence snippets, SMILES enrichment, and review workbooks.
 
 ## What It Produces
 
@@ -71,23 +71,23 @@ The automated Discovery workflow writes:
 
 See `docs/fairchem_uma.md` for the FairChem/UMA workflow and the Hugging Face leaderboard submission API notes.
 
-## Quick Start - Windows
+## Quick Start
 
-### First-Time Installation
+### Windows Installation
 
 1. Install Python 3.10+ and Node.js 20.9+.
-2. Double-click `install.bat` in the repository root, or run:
+2. Double-click `install-windows.bat` in the repository root, or run:
 
 ```bat
-install.bat
+install-windows.bat
 ```
 
-### Run The Application
+### Windows Run
 
-1. Double-click `run.bat` in the repository root, or run:
+1. Double-click `run-windows.bat` in the repository root, or run:
 
 ```bat
-run.bat
+run-windows.bat
 ```
 
 2. Open `http://localhost:3000`.
@@ -95,13 +95,46 @@ run.bat
 4. Place PDF files in your input folder.
 5. Click `Run Pipeline`.
 
-### Stop The Application
+### Windows Stop
 
 Close the backend/frontend terminal windows or run:
 
 ```bat
-stop.bat
+stop-windows.bat
 ```
+
+`end-windows.bat` is also available as a plain-language stop alias. The older `install.bat`, `run.bat`, and `stop.bat` files remain for compatibility.
+
+### Mac Installation
+
+1. Install Python 3.10+ and Node.js 20.9+. On M-Series Macs, Homebrew is usually the easiest path:
+
+```bash
+brew install python node
+```
+
+2. In Terminal, run from the repository root:
+
+```bash
+chmod +x install-mac.command run-mac.command stop-mac.command end-mac.command
+./install-mac.command
+```
+
+### Mac Run
+
+```bash
+./run-mac.command
+```
+
+Then open `http://localhost:3000`. If port 3000 is busy, the Mac runner chooses the next open port from 3000 to 3024 and opens it automatically.
+
+### Mac Stop
+
+```bash
+./stop-mac.command
+```
+
+`./end-mac.command` is also available as a plain-language stop alias.
 
 ## Default Folders
 
@@ -109,6 +142,11 @@ The installer creates:
 
 - Input: `C:\Users\YourName\CleanMol\input`
 - Output: `C:\Users\YourName\CleanMol\output`
+
+On Mac, the installer creates:
+
+- Input: `/Users/YourName/CleanMol/input`
+- Output: `/Users/YourName/CleanMol/output`
 
 ## Manual Setup
 
@@ -120,6 +158,12 @@ python -m venv .venv
 .\.venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8787
+```
+
+Mac activation uses:
+
+```bash
+source .venv/bin/activate
 ```
 
 Frontend:

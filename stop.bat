@@ -12,11 +12,13 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":8787" ^| findstr "LISTENING
     echo Killed process on port 8787 (PID: %%a)
 )
 
-:: Kill frontend (node on port 3000)
+:: Kill frontend (node on ports 3000-3024)
 echo Stopping frontend server...
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":3000" ^| findstr "LISTENING"') do (
-    taskkill /F /PID %%a >nul 2>&1
-    echo Killed process on port 3000 (PID: %%a)
+for /l %%p in (3000,1,3024) do (
+    for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":%%p" ^| findstr "LISTENING"') do (
+        taskkill /F /PID %%a >nul 2>&1
+        echo Killed process on port %%p (PID: %%a)
+    )
 )
 
 :: Also try to kill any remaining node processes from our app

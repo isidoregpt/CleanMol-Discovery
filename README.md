@@ -1,6 +1,6 @@
 # CleanMol Discovery
 
-CleanMol Discovery is a Windows-first research application for building chemistry datasets and ranked lab-candidate packets for next-generation disinfectant discovery.
+CleanMol Discovery is a desktop research application for building chemistry datasets and ranked lab-candidate packets for next-generation disinfectant discovery. It supports Windows and Apple Silicon / M-Series Macs.
 
 The project is designed for the "Lysol 2.0" problem: helping researchers move from scattered papers, patents, public datasets, and incomplete local data toward modern, reviewable candidate molecules that can be evaluated by a chemist and then tested in the lab.
 
@@ -107,18 +107,20 @@ Discovery and candidate outputs:
 - `discovery/discovery_source_manifest.json`
 - `discovery/dataset_quality_report.json`
 
-## Quick Start On Windows
+## Quick Start
 
-Install:
+Use the script for your operating system.
+
+### Windows
 
 ```bat
-install.bat
+install-windows.bat
 ```
 
 Run:
 
 ```bat
-run.bat
+run-windows.bat
 ```
 
 Then open:
@@ -130,14 +132,66 @@ http://localhost:3000
 Stop:
 
 ```bat
-stop.bat
+stop-windows.bat
 ```
+
+`end-windows.bat` is also available as a plain-language stop alias.
 
 The installer creates default working folders under:
 
 ```text
 C:\Users\YourName\CleanMol\input
 C:\Users\YourName\CleanMol\output
+```
+
+The older `install.bat`, `run.bat`, and `stop.bat` files remain for compatibility, but the `*-windows.bat` names are clearer.
+
+### Apple Silicon / M-Series Mac
+
+Open Terminal in the repository root. If needed, make the scripts executable:
+
+```bash
+chmod +x install-mac.command run-mac.command stop-mac.command end-mac.command
+```
+
+Install:
+
+```bash
+./install-mac.command
+```
+
+Run:
+
+```bash
+./run-mac.command
+```
+
+Stop:
+
+```bash
+./stop-mac.command
+```
+
+`./end-mac.command` is also available as a plain-language stop alias.
+
+The Mac installer creates default working folders under:
+
+```text
+/Users/YourName/CleanMol/input
+/Users/YourName/CleanMol/output
+```
+
+Mac requirements:
+
+- macOS on Apple Silicon / M-Series hardware
+- Python 3.10+
+- Node.js 20.9+
+- npm
+
+Install Python and Node from their official installers, or with Homebrew:
+
+```bash
+brew install python node
 ```
 
 Place PDF files in the input folder, choose an output folder, add API keys, and run the pipeline or Discovery Automation workflow.
@@ -165,6 +219,12 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8787
 ```
 
+On Mac, activate the virtual environment with:
+
+```bash
+source cleanmol/backend/.venv/bin/activate
+```
+
 Frontend:
 
 ```powershell
@@ -184,8 +244,16 @@ Open `http://localhost:3000`.
     frontend/       Next.js desktop-style UI
     docs/           Discovery strategy, automation, and FairChem/UMA notes
   install.bat       Windows installer
+  install-windows.bat
+  install-mac.command
   run.bat           Starts backend and frontend
+  run-windows.bat
+  run-mac.command
   stop.bat          Stops local app processes
+  stop-windows.bat
+  stop-mac.command
+  end-windows.bat
+  end-mac.command
   LICENSE           CleanMol Discovery Research License
   CITATION.cff      Scholarly citation metadata
 ```

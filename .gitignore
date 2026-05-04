@@ -21,3 +21,4 @@ Thumbs.db
 
 # App
 *.db
+.cleanmol-runtime/
