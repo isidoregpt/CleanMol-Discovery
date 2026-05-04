@@ -4,7 +4,7 @@ CleanMol is a literature-grounded chemistry dataset builder for QAC/biocide disc
 
 ## Current LLM Defaults
 
-CleanMol pins provider model IDs for reproducible runs, but the local frontend now loads the backend's verified defaults from `/api/defaults` instead of maintaining a separate stale list. As of 2026-05-04, those defaults are Anthropic `claude-opus-4-7`, Anthropic figure model `claude-sonnet-4-6`, OpenAI `gpt-5.5`, and Google `gemini-3.1-pro-preview`.
+CleanMol defaults to the latest provider frontier models when API keys are available. The backend asks provider model-list APIs for current Anthropic, OpenAI, and Google models, while keeping verified fallback IDs for offline startup and reproducible records. As of 2026-05-04, those fallbacks are Anthropic `claude-opus-4-7`, Anthropic figure model `claude-sonnet-4-6`, OpenAI `gpt-5.5`, and Google `gemini-3.1-pro-preview`.
 
 ## 2026 Discovery Direction
 

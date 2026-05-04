@@ -8,12 +8,7 @@ import threading
 import json
 from pathlib import Path
 from .pipeline import run_pipeline
-from .model_config import (
-    DEFAULT_MODELS,
-    LEGACY_MODEL_ALIASES,
-    MODEL_DEFAULTS_LAST_VERIFIED,
-    MODEL_DEFAULT_SOURCE_URLS,
-)
+from .model_config import resolve_latest_model_defaults
 from .discovery_automation import run_discovery_automation
 from .online_source_catalog import search_huggingface_sources, source_catalog
 
@@ -47,6 +42,10 @@ class SourceSearchPayload(BaseModel):
     limit: Optional[int] = 12
     keys: Optional[Dict[str, str]] = None
 
+
+class DefaultsResolvePayload(BaseModel):
+    keys: Optional[Dict[str, str]] = None
+
 @app.get("/")
 def root():
     return {"status": "CleanMol backend is running", "version": "1.0"}
@@ -54,12 +53,12 @@ def root():
 
 @app.get("/api/defaults")
 def api_defaults():
-    return {
-        "models": DEFAULT_MODELS,
-        "legacy_model_aliases": LEGACY_MODEL_ALIASES,
-        "model_defaults_last_verified": MODEL_DEFAULTS_LAST_VERIFIED,
-        "model_default_source_urls": MODEL_DEFAULT_SOURCE_URLS,
-    }
+    return resolve_latest_model_defaults({})
+
+
+@app.post("/api/defaults/resolve")
+def api_resolve_defaults(payload: DefaultsResolvePayload):
+    return resolve_latest_model_defaults(payload.keys or {})
 
 
 @app.get("/api/discovery/sources")

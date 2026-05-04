@@ -21,7 +21,7 @@ from .smiles_validation import validate_and_enrich_smiles
 from .excel_export import create_review_workbook, export_combined_workbook
 from .merge_exports import merge_and_export_datasets
 from .logger import PipelineLogger
-from .model_config import normalize_model_id, normalize_models
+from .model_config import normalize_model_id, resolve_models_for_run
 
 
 def _utc_iso() -> str:
@@ -125,10 +125,10 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
     if not input_path.is_dir():
         raise ValueError(f"Input path is not a folder: {input_path}")
 
-    requested_models = dict(models or {})
-    models = normalize_models(requested_models)
     keys = keys or {}
     options = options or {}
+    requested_models = dict(models or {})
+    models, model_resolution = resolve_models_for_run(requested_models, keys, options)
 
     out = Path(output_dir).expanduser()
     bundles_root = out / "bundles"
@@ -142,6 +142,7 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
         "output_dir": output_dir,
         "models": models,
         "requested_models": requested_models,
+        "model_resolution": model_resolution,
         "keys": keys,
         "options": options
     }

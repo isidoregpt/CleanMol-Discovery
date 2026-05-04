@@ -23,7 +23,7 @@ CleanMol is a Windows-first desktop application for extracting structured chemis
 
 ## 2026 Default Models
 
-The backend is the source of truth for model defaults. The frontend loads those defaults from `/api/defaults` when the local backend starts, while keeping a pinned fallback for offline startup. The IDs are intentionally pinned for reproducible chemistry runs, and known old IDs are upgraded automatically. Last verified against provider docs: 2026-05-04.
+The backend is the source of truth for model defaults. The app defaults to the latest provider frontier models when API keys are available by calling provider model-list APIs. If a key is missing, a provider is unreachable, or a selector cannot find a suitable frontier model, CleanMol uses verified fallback IDs for offline startup and reproducible records. Known old IDs are upgraded automatically. Fallbacks last verified against provider docs: 2026-05-04.
 
 | Role | Default model | Why |
 | --- | --- | --- |
@@ -31,6 +31,8 @@ The backend is the source of truth for model defaults. The frontend loads those 
 | Figure analysis | `claude-sonnet-4-6` | Faster multimodal structure extraction |
 | Audit | `gpt-5.5` | Strong reasoning and citation verification via the OpenAI Responses API |
 | Gap hunt | `gemini-3.1-pro-preview` | Long-context coverage checks over full papers |
+
+The Models panel keeps `Use latest provider models by default` enabled. A chemist can click `Refresh latest` to re-check providers immediately, or turn the option off to run exactly the visible model IDs.
 
 ## Discovery Model And Dataset Recommendation
 
@@ -178,8 +180,11 @@ Keys are stored in browser localStorage and sent only to the local backend for p
 ## References
 
 - Anthropic model overview: https://platform.claude.com/docs/en/about-claude/models/overview
+- Anthropic Models API: https://platform.claude.com/docs/en/api/models/list
 - OpenAI model overview: https://developers.openai.com/api/docs/models
+- OpenAI Models API: https://developers.openai.com/api/reference/resources/models/methods/list
 - Gemini 3.1 Pro Preview model page: https://ai.google.dev/gemini-api/docs/models/gemini-3.1-pro-preview
+- Gemini Models API: https://ai.google.dev/api/models#v1beta.models.list
 - ChEMBL downloads: https://chembl.gitbook.io/chembl-interface-documentation/downloads
 - PubChem resources: https://www.ncbi.nlm.nih.gov/guide/chemicals-bioassays/
 - BindingDB info: https://www.bindingdb.org/rwd/bind/info.jsp

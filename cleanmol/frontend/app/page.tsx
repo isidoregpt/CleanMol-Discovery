@@ -1,13 +1,13 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { ProgressBar } from "./components/ProgressBar";
 import { Terminal, TerminalLine } from "./components/Terminal";
 import { StageTracker } from "./components/StageTracker";
 import { StatCard } from "./components/StatCard";
 import { DNALoader } from "./components/DNALoader";
-import { getDefaults } from "./api";
-import type { ModelBundle } from "./api";
+import { getDefaults, resolveLatestDefaults } from "./api";
+import type { DefaultsResponse, ModelBundle } from "./api";
 
 const LS = {
   openai: "cleanmol:key:openai",
@@ -15,6 +15,7 @@ const LS = {
   gemini: "cleanmol:key:gemini",
   hf: "cleanmol:key:hf",
   models: "cleanmol:models",
+  autoLatestModels: "cleanmol:models:autoLatest",
   paths: "cleanmol:paths"
 };
 
@@ -110,6 +111,7 @@ type OnlineSource = {
   source_url?: string;
   use_guidance?: string;
 };
+type ModelKey = "primary" | "auditor" | "gapHunter";
 
 // Creep function: starts fast, slows down, never reaches cap
 function creepProgress(elapsedMs: number, cap = 0.92, speed = 0.0003): number {
@@ -129,6 +131,10 @@ export default function Page() {
   const [primaryModel, setPrimaryModel] = useState(FALLBACK_MODEL_DEFAULTS.primary);
   const [auditorModel, setAuditorModel] = useState(FALLBACK_MODEL_DEFAULTS.auditor);
   const [gapModel, setGapModel] = useState(FALLBACK_MODEL_DEFAULTS.gapHunter);
+  const [autoLatestModels, setAutoLatestModels] = useState(true);
+  const [modelRefreshRunning, setModelRefreshRunning] = useState(false);
+  const [modelRefreshStatus, setModelRefreshStatus] = useState("");
+  const modelDefaultsRef = useRef<ModelBundle>(FALLBACK_MODEL_DEFAULTS);
 
   // Paths
   const [inputDir, setInputDir] = useState("");
@@ -177,6 +183,63 @@ export default function Page() {
   const [completed, setCompleted] = useState(false);
   const [logFile, setLogFile] = useState("");
 
+  const applyDefaultPayload = useCallback((data: DefaultsResponse, force = false) => {
+    const previousDefaults = modelDefaultsRef.current;
+    const models = { ...FALLBACK_MODEL_DEFAULTS, ...(data.models || {}) };
+    const aliases = { ...FALLBACK_LEGACY_MODEL_ALIASES, ...(data.legacy_model_aliases || {}) };
+
+    const updateCurrentModel = (current: string, key: ModelKey) => {
+      const nextDefault = models[key] || FALLBACK_MODEL_DEFAULTS[key];
+      const normalized = normalizeModelId(current, nextDefault, aliases);
+      if (
+        force ||
+        !current ||
+        current === previousDefaults[key] ||
+        current === FALLBACK_MODEL_DEFAULTS[key] ||
+        normalized !== current
+      ) {
+        return normalized || nextDefault;
+      }
+      return current;
+    };
+
+    setModelDefaults(models);
+    modelDefaultsRef.current = models;
+    if (data.model_defaults_last_verified) {
+      setModelDefaultsVerified(data.model_defaults_last_verified);
+    }
+
+    setPrimaryModel((current) => updateCurrentModel(current, "primary"));
+    setAuditorModel((current) => updateCurrentModel(current, "auditor"));
+    setGapModel((current) => updateCurrentModel(current, "gapHunter"));
+  }, []);
+
+  const refreshLatestModelDefaults = useCallback(async (force = false, quiet = false) => {
+    const hasProviderKey = [openai, anthropic, gemini].some(key => key.trim().length >= 12);
+    if (!hasProviderKey) {
+      if (!quiet) setModelRefreshStatus("Add provider API keys to refresh latest model defaults.");
+      return;
+    }
+
+    setModelRefreshRunning(true);
+    if (!quiet) setModelRefreshStatus("Checking provider model lists...");
+    try {
+      const data = await resolveLatestDefaults({ openai, anthropic, gemini });
+      applyDefaultPayload(data, force);
+      const resolved = Object.values(data.resolution || {}).filter(item => item.status === "resolved").length;
+      setModelRefreshStatus(
+        resolved
+          ? `Latest provider defaults refreshed (${resolved} role${resolved === 1 ? "" : "s"} resolved).`
+          : "Provider refresh completed; using verified fallback defaults."
+      );
+    } catch (e: unknown) {
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      setModelRefreshStatus(`Latest model refresh failed; using verified fallbacks. ${errorMessage}`);
+    } finally {
+      setModelRefreshRunning(false);
+    }
+  }, [anthropic, applyDefaultPayload, gemini, openai]);
+
   // Load saved settings
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -185,6 +248,7 @@ export default function Page() {
     setAnthropic(localStorage.getItem(LS.anthropic) || "");
     setGemini(localStorage.getItem(LS.gemini) || "");
     setHfToken(localStorage.getItem(LS.hf) || "");
+    setAutoLatestModels(localStorage.getItem(LS.autoLatestModels) !== "false");
 
     const m = localStorage.getItem(LS.models);
     if (m) {
@@ -208,41 +272,11 @@ export default function Page() {
 
   useEffect(() => {
     let cancelled = false;
-    const previousDefaults = modelDefaults;
-
-    const updateCurrentModel = (
-      current: string,
-      key: "primary" | "auditor" | "gapHunter",
-      models: ModelBundle,
-      aliases: Record<string, string>
-    ) => {
-      const nextDefault = models[key] || FALLBACK_MODEL_DEFAULTS[key];
-      const normalized = normalizeModelId(current, nextDefault, aliases);
-      if (
-        !current ||
-        current === previousDefaults[key] ||
-        current === FALLBACK_MODEL_DEFAULTS[key] ||
-        normalized !== current
-      ) {
-        return normalized || nextDefault;
-      }
-      return current;
-    };
 
     getDefaults()
       .then((data) => {
         if (cancelled) return;
-        const models = { ...FALLBACK_MODEL_DEFAULTS, ...(data.models || {}) };
-        const aliases = { ...FALLBACK_LEGACY_MODEL_ALIASES, ...(data.legacy_model_aliases || {}) };
-
-        setModelDefaults(models);
-        if (data.model_defaults_last_verified) {
-          setModelDefaultsVerified(data.model_defaults_last_verified);
-        }
-
-        setPrimaryModel((current) => updateCurrentModel(current, "primary", models, aliases));
-        setAuditorModel((current) => updateCurrentModel(current, "auditor", models, aliases));
-        setGapModel((current) => updateCurrentModel(current, "gapHunter", models, aliases));
+        applyDefaultPayload(data);
       })
       .catch(() => {
         // The local backend may still be starting; the pinned frontend fallback stays usable.
@@ -251,7 +285,15 @@ export default function Page() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [applyDefaultPayload]);
+
+  useEffect(() => {
+    if (!autoLatestModels || ![openai, anthropic, gemini].some(key => key.trim().length >= 12)) return;
+    const timeout = window.setTimeout(() => {
+      refreshLatestModelDefaults(true, true);
+    }, 1000);
+    return () => window.clearTimeout(timeout);
+  }, [anthropic, autoLatestModels, gemini, openai, refreshLatestModelDefaults]);
 
   // Save settings
   useEffect(() => {
@@ -261,6 +303,11 @@ export default function Page() {
     localStorage.setItem(LS.gemini, gemini);
     localStorage.setItem(LS.hf, hfToken);
   }, [openai, anthropic, gemini, hfToken]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(LS.autoLatestModels, autoLatestModels ? "true" : "false");
+  }, [autoLatestModels]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -433,7 +480,7 @@ export default function Page() {
             gapHunter: gapModel
           },
           keys: { openai, anthropic, gemini },
-          options: { max_gap_rounds: 2 }
+          options: { max_gap_rounds: 2, resolve_latest_models: autoLatestModels }
         }),
       });
 
@@ -1093,17 +1140,41 @@ export default function Page() {
                   <span>ðŸ¤–</span>
                   <span>Models</span>
                 </h2>
-                <button
-                  type="button"
-                  onClick={useModelDefaults}
-                  className="text-xs px-3 py-2 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 transition"
-                >
-                  Use verified defaults
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => refreshLatestModelDefaults(true)}
+                    disabled={modelRefreshRunning}
+                    className="text-xs px-3 py-2 rounded-lg bg-cyan-400/10 hover:bg-cyan-400/15 border border-cyan-300/20 transition disabled:opacity-50"
+                  >
+                    {modelRefreshRunning ? "Checking..." : "Refresh latest"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={useModelDefaults}
+                    className="text-xs px-3 py-2 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 transition"
+                  >
+                    Use defaults
+                  </button>
+                </div>
               </div>
               <p className="text-xs text-white/45 mb-4">
-                Defaults verified {modelDefaultsVerified}; pinned for reproducible runs.
+                Defaults auto-refresh from provider model lists when keys are available; verified fallback {modelDefaultsVerified}.
               </p>
+              <label className="flex items-center gap-2 text-xs text-white/55 mb-4">
+                <input
+                  type="checkbox"
+                  checked={autoLatestModels}
+                  onChange={(e) => setAutoLatestModels(e.target.checked)}
+                  className="h-4 w-4 accent-cyan-400"
+                />
+                <span>Use latest provider models by default</span>
+              </label>
+              {modelRefreshStatus && (
+                <div className="mb-4 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/55">
+                  {modelRefreshStatus}
+                </div>
+              )}
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
