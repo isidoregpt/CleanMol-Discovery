@@ -1135,7 +1135,7 @@ export default function Page() {
               rel="noreferrer"
               className="text-cyan-300/70 hover:text-cyan-200 transition"
             >
-              Source / AGPL-3.0
+              Source / Research License
             </a>
             <span>â€¢</span>
             <span>2026</span>

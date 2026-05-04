@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use CleanMol Discovery in research, publications, candidate generation, datasets, patent filings, discoveries, or commercial evaluation, cite and credit it as described here."
+title: "CleanMol Discovery"
+version: "1.0"
+date-released: "2026-05-04"
+authors:
+  - family-names: "Graziola"
+    given-names: "Jonathan"
+abstract: "CleanMol Discovery is a source-available research tool for literature-grounded chemistry dataset building and candidate generation for modern disinfectant discovery."
+license: "LicenseRef-CleanMol-Discovery-Research-License-1.0"
+url: "https://github.com/isidoregpt/CleanMol-Discovery"
+repository-code: "https://github.com/isidoregpt/CleanMol-Discovery"
+keywords:
+  - chemistry
+  - disinfectant discovery
+  - antimicrobial discovery
+  - molecular generation
+  - research software

@@ -1,8 +1,20 @@
 CleanMol Discovery
 Copyright (C) 2026 Jonathan Graziola
 
-CleanMol Discovery is licensed under the GNU Affero General Public License
-version 3 only. See LICENSE.
+CleanMol Discovery is licensed under the CleanMol Discovery Research License.
+See LICENSE.
+
+CleanMol Discovery is source-available for research, education, nonprofit,
+and individual use. Commercial use, resale, hosted services, private-label
+distribution, for-profit product development, and commercialization of
+discoveries or outputs require a separate written commercial license.
+
+Publications, patents, datasets, candidate disclosures, product materials,
+regulatory filings, and discovery announcements that materially use this
+software or its outputs must credit:
+
+CleanMol Discovery by Jonathan Graziola
+https://github.com/isidoregpt/CleanMol-Discovery
 
 This repository's license covers the CleanMol Discovery source code authored
 for this project. Third-party models, datasets, APIs, papers, chemical

@@ -48,11 +48,19 @@ See the strategy, automated discovery, and FairChem/UMA notes in the app docs fo
 
 ## License
 
-CleanMol Discovery is licensed under the GNU Affero General Public License v3.0 only (`AGPL-3.0-only`).
+CleanMol Discovery is source-available under the CleanMol Discovery Research License. It is free for research,
+education, nonprofit, and individual use.
 
-That license allows use, modification, distribution, and resale, but redistributed or network-hosted modified versions
-must provide corresponding source code under the same license. This is intentional: the project is meant to stay usable
-by under-resourced researchers, not disappear into closed repackaged products.
+Commercial use requires a separate written commercial license. This includes resale, hosted services, private-label
+distribution, for-profit internal R&D, paid discovery services, product development, and commercialization of outputs
+or discoveries materially enabled by the software.
 
-The CleanMol Discovery and CleanMol names are not licensed for misleading resale, endorsement, or branding of forks.
-See `TRADEMARKS.md` and `NOTICE`.
+Publications, patent filings, datasets, candidate disclosures, regulatory filings, product materials, discovery
+announcements, and other research or commercial outputs that materially use CleanMol Discovery or its generated outputs
+must credit:
+
+CleanMol Discovery by Jonathan Graziola
+https://github.com/isidoregpt/CleanMol-Discovery
+
+For scholarly work, cite the project using `CITATION.cff`. The CleanMol Discovery and CleanMol names are not licensed
+for misleading resale, endorsement, or branding of forks. See `LICENSE`, `NOTICE`, and `TRADEMARKS.md`.
