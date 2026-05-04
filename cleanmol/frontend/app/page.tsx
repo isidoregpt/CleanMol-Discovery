@@ -50,16 +50,16 @@ function normalizeModelId(
 }
 
 const PIPELINE_STAGES = [
-  { id: "pdf", name: "PDF Extraction", icon: "ðŸ“„" },
-  { id: "figure", name: "Figure Analysis", icon: "ðŸ–¼ï¸" },
-  { id: "opus", name: "Primary Extraction", icon: "ðŸ§¬" },
-  { id: "audit", name: "OpenAI Audit", icon: "ðŸ”" },
-  { id: "repair", name: "Auto-Repair", icon: "ðŸ”§" },
-  { id: "gap", name: "Gemini Gap Hunt", icon: "ðŸŽ¯" },
-  { id: "resolve", name: "Gap Resolution", icon: "âœ¨" },
-  { id: "smiles", name: "SMILES Lookup", icon: "ðŸ”¬" },
-  { id: "validate", name: "SMILES Validation", icon: "âœ“" },
-  { id: "export", name: "Export Dataset", icon: "ðŸ’¾" },
+  { id: "pdf", name: "PDF Extraction", icon: "1" },
+  { id: "figure", name: "Figure Analysis", icon: "2" },
+  { id: "opus", name: "Primary Extraction", icon: "3" },
+  { id: "audit", name: "OpenAI Audit", icon: "4" },
+  { id: "repair", name: "Auto-Repair", icon: "5" },
+  { id: "gap", name: "Gemini Gap Hunt", icon: "6" },
+  { id: "resolve", name: "Gap Resolution", icon: "7" },
+  { id: "smiles", name: "SMILES Lookup", icon: "8" },
+  { id: "validate", name: "SMILES Validation", icon: "9" },
+  { id: "export", name: "Export Dataset", icon: "10" },
 ];
 
 // Stage weights for weighted progress calculation
@@ -112,6 +112,7 @@ type OnlineSource = {
   use_guidance?: string;
 };
 type ModelKey = "primary" | "auditor" | "gapHunter";
+type InfoPanel = "instructions" | "about" | "license";
 
 // Creep function: starts fast, slows down, never reaches cap
 function creepProgress(elapsedMs: number, cap = 0.92, speed = 0.0003): number {
@@ -182,6 +183,7 @@ export default function Page() {
   });
   const [completed, setCompleted] = useState(false);
   const [logFile, setLogFile] = useState("");
+  const [infoPanel, setInfoPanel] = useState<InfoPanel>("instructions");
 
   const applyDefaultPayload = useCallback((data: DefaultsResponse, force = false) => {
     const previousDefaults = modelDefaultsRef.current;
@@ -531,14 +533,14 @@ export default function Page() {
                     const statsStr = data.stats
                       ? ` (${Object.entries(data.stats).map(([k, v]) => `${v} ${k}`).join(", ")})`
                       : "";
-                    addLog(`[${data.doc_index}/${data.doc_total}] âœ“ ${data.stage} complete${statsStr}`, "success", data.stage);
+                    addLog(`[${data.doc_index}/${data.doc_total}] OK ${data.stage} complete${statsStr}`, "success", data.stage);
                   }
                 } else if (data.type === "complete") {
                   setProgress(100);
                   addLog("", "dim");
-                  addLog("â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•", "success");
-                  addLog("  PIPELINE COMPLETED SUCCESSFULLY", "success", "âœ“");
-                  addLog("â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•", "success");
+                  addLog("===========================================", "success");
+                  addLog("  PIPELINE COMPLETED SUCCESSFULLY", "success", "OK");
+                  addLog("===========================================", "success");
 
                   // Extract stats from result
                   const result = data.result;
@@ -557,7 +559,7 @@ export default function Page() {
 
                   setCompleted(true);
                 } else if (data.type === "error") {
-                  addLog(`ERROR: ${data.error}`, "error", "âœ•");
+                  addLog(`ERROR: ${data.error}`, "error", "ERR");
                 }
                 // Ignore heartbeat, just updates lastUpdate
               } catch {
@@ -569,7 +571,7 @@ export default function Page() {
       }
     } catch (e: unknown) {
       const errorMessage = e instanceof Error ? e.message : String(e);
-      addLog(`ERROR: ${errorMessage}`, "error", "âœ•");
+      addLog(`ERROR: ${errorMessage}`, "error", "ERR");
       updateStage(currentStage ? stageToId[currentStage] || "pdf" : "pdf", "error");
     } finally {
       setRunning(false);
@@ -697,9 +699,27 @@ export default function Page() {
     return !!inputDir && !!outputDir && !!anthropic && !!primaryModel;
   }, [inputDir, outputDir, anthropic, primaryModel]);
 
+  const pipelineIssues = useMemo(() => {
+    const issues: string[] = [];
+    if (!anthropic) issues.push("Anthropic API key");
+    if (!inputDir) issues.push("input folder with PDFs");
+    if (!outputDir) issues.push("output folder");
+    if (!primaryModel) issues.push("primary model");
+    return issues;
+  }, [anthropic, inputDir, outputDir, primaryModel]);
+
+  const discoveryIssues = useMemo(() => {
+    const issues: string[] = [];
+    if (!outputDir) issues.push("output folder");
+    if (discoveryMode === "upload" && !uploadedDatasetPath) {
+      issues.push("uploaded CSV or Excel dataset");
+    }
+    return issues;
+  }, [discoveryMode, outputDir, uploadedDatasetPath]);
+
   const canRunDiscovery = useMemo(() => {
-    return !!outputDir && !discoveryRunning && !running;
-  }, [outputDir, discoveryRunning, running]);
+    return discoveryIssues.length === 0 && !discoveryRunning && !running;
+  }, [discoveryIssues.length, discoveryRunning, running]);
 
   const useModelDefaults = () => {
     setPrimaryModel(modelDefaults.primary);
@@ -720,7 +740,9 @@ export default function Page() {
         <header className="flex items-end justify-between gap-4 flex-wrap py-4">
           <div>
             <div className="flex items-center gap-3 mb-3">
-              <div className="text-4xl">ðŸ§¬</div>
+              <div className="h-12 w-12 rounded-xl border border-cyan-300/30 bg-cyan-400/10 flex items-center justify-center text-sm font-bold tracking-widest text-cyan-200">
+                CM
+              </div>
               <div>
                 <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 via-fuchsia-400 to-emerald-400 bg-clip-text text-transparent">
                   CleanMol Discovery
@@ -743,13 +765,66 @@ export default function Page() {
                 <span>Processing...</span>
               </>
             ) : (
-              <>
-                <span>â–¶</span>
-                <span>Run Pipeline</span>
-              </>
+              <span>Run Pipeline</span>
             )}
           </button>
         </header>
+
+        <section className="glass-card p-5">
+          <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
+            <div>
+              <h2 className="text-lg font-semibold">Research Guide</h2>
+              <p className="text-sm text-white/50">
+                Start with the workflow you need; CleanMol will show the required folders and keys for that path.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              {(["instructions", "about", "license"] as InfoPanel[]).map(panel => (
+                <button
+                  key={panel}
+                  type="button"
+                  onClick={() => setInfoPanel(panel)}
+                  className={`px-3 py-2 rounded-lg border text-sm transition ${
+                    infoPanel === panel
+                      ? "border-cyan-400/50 bg-cyan-500/15 text-cyan-100"
+                      : "border-white/10 bg-white/5 text-white/65 hover:bg-white/10"
+                  }`}
+                >
+                  {panel === "instructions" ? "Instructions" : panel === "about" ? "About" : "License"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {infoPanel === "instructions" && (
+            <div className="grid md:grid-cols-3 gap-4 text-sm text-white/70">
+              <div>
+                <div className="text-xs uppercase tracking-wider text-cyan-300/80 mb-2">1. Choose a path</div>
+                <p>Use Run Pipeline when you have PDFs. Use Discovery Automation when you want candidates from public, generated, or uploaded data.</p>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-wider text-cyan-300/80 mb-2">2. Set folders</div>
+                <p>Pipeline needs input and output folders. Discovery only needs an output folder; Chemist upload also needs a CSV or Excel file.</p>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-wider text-cyan-300/80 mb-2">3. Review outputs</div>
+                <p>Open the ranked CSV and Excel review packet before any synthesis, safety review, or lab testing decision.</p>
+              </div>
+            </div>
+          )}
+
+          {infoPanel === "about" && (
+            <p className="text-sm text-white/70">
+              CleanMol Discovery builds auditable chemistry datasets and ranked disinfectant candidate packets for next-generation antimicrobial research. It is meant to help researchers without large private datasets get a serious starting point while keeping provenance, quality gates, and review files visible.
+            </p>
+          )}
+
+          {infoPanel === "license" && (
+            <p className="text-sm text-white/70">
+              Free for research, education, nonprofit, and individual use under the CleanMol Discovery Research License. Commercial use, resale, hosted services, private-label distribution, or commercialization of outputs requires a separate written commercial license. Publications and discoveries materially using CleanMol must credit CleanMol Discovery by Jonathan Graziola.
+            </p>
+          )}
+        </section>
 
         {/* Progress Section - Only visible when running or completed */}
         {(running || completed) && (
@@ -779,10 +854,10 @@ export default function Page() {
             {/* Stats row */}
             {completed && (
               <div className="grid grid-cols-4 gap-4 mt-6 fade-in">
-                <StatCard value={stats.documents} label="Documents" icon="ðŸ“„" />
-                <StatCard value={stats.molecules} label="Molecules" icon="ðŸ§¬" />
-                <StatCard value={stats.experiments} label="Experiments" icon="ðŸ§ª" />
-                <StatCard value={stats.results} label="Results" icon="ðŸ“Š" />
+                <StatCard value={stats.documents} label="Documents" icon="DOC" />
+                <StatCard value={stats.molecules} label="Molecules" icon="MOL" />
+                <StatCard value={stats.experiments} label="Experiments" icon="EXP" />
+                <StatCard value={stats.results} label="Results" icon="RES" />
               </div>
             )}
           </section>
@@ -797,7 +872,6 @@ export default function Page() {
             {/* API Keys */}
             <section className="glass-card glass-card-glow p-6">
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <span>ðŸ”‘</span>
                 <span>API Keys</span>
                 <span className="text-xs text-white/40 font-normal ml-2">Stored locally in browser</span>
               </h2>
@@ -856,13 +930,15 @@ export default function Page() {
             {/* Folders */}
             <section className="glass-card glass-card-glow p-6">
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <span>ðŸ“</span>
                 <span>Directories</span>
               </h2>
+              <p className="text-sm text-white/50 mb-4">
+                Pipeline extraction needs both folders. Discovery Automation only needs the output folder; Chemist upload also needs the dataset file.
+              </p>
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
-                    Input Folder <span className="text-cyan-400">*required</span>
+                    Input Folder <span className="text-white/30">(pipeline only)</span>
                   </label>
                   <input
                     type="text"
@@ -900,6 +976,9 @@ export default function Page() {
                   <span>{discoveryRunning ? "Running..." : "Run Discovery"}</span>
                 </button>
               </div>
+              <p className="text-sm text-white/55 mb-4">
+                Auto-create can start with only an output folder. Chemist upload uses your CSV or Excel file and then applies the same quality gates.
+              </p>
 
               <div className="grid md:grid-cols-2 gap-4 mb-4">
                 <div>
@@ -964,6 +1043,11 @@ export default function Page() {
                       Loaded: {uploadedDatasetPath}
                     </div>
                   )}
+                  {!outputDir && (
+                    <div className="text-xs text-amber-300/80 mt-2">
+                      Choose an output folder first so CleanMol has a safe place to save the uploaded dataset.
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1017,7 +1101,7 @@ export default function Page() {
                           <span className="text-[10px] uppercase text-white/40">{source.connector}</span>
                         </div>
                         <div className="text-xs text-white/50 mt-1">
-                          {source.role} Â· {source.modernity}
+                          {source.role} - {source.modernity}
                         </div>
                         <div className="text-xs text-white/40 mt-1">
                           {source.domain_fit}
@@ -1059,7 +1143,7 @@ export default function Page() {
                         >
                           <div className="text-sm font-medium text-white/90 break-all">{source.name}</div>
                           <div className="text-xs text-white/50 mt-1">
-                            {source.domain_fit} Â· {source.modernity}
+                            {source.domain_fit} - {source.modernity}
                           </div>
                         </button>
                       ))}
@@ -1137,7 +1221,6 @@ export default function Page() {
             <section className="glass-card p-6">
               <div className="flex items-center justify-between gap-3 mb-4">
                 <h2 className="text-lg font-semibold flex items-center gap-2">
-                  <span>ðŸ¤–</span>
                   <span>Models</span>
                 </h2>
                 <div className="flex items-center gap-2">
@@ -1215,7 +1298,6 @@ export default function Page() {
             {/* Stage Tracker */}
             <section className="glass-card p-6">
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <span>ðŸ“‹</span>
                 <span>Pipeline Stages</span>
               </h2>
               <StageTracker stages={stages} />
@@ -1224,24 +1306,35 @@ export default function Page() {
             {/* Status */}
             <section className="glass-card p-6">
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <span>ðŸ“¡</span>
                 <span>Status</span>
               </h2>
               <div className="space-y-3">
                 <div className="flex items-center gap-3">
                   <span className={`w-3 h-3 rounded-full ${canRun ? "bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.5)]" : "bg-amber-400"}`} />
                   <span className="text-sm">
-                    {canRun ? "Ready to run" : "Configure required fields"}
+                    Pipeline: {canRun ? "ready" : "needs setup"}
                   </span>
                 </div>
-                {!anthropic && (
-                  <div className="text-xs text-amber-400/80">âš  Anthropic API key required</div>
-                )}
-                {!inputDir && (
-                  <div className="text-xs text-amber-400/80">âš  Input folder required</div>
-                )}
-                {!outputDir && (
-                  <div className="text-xs text-amber-400/80">âš  Output folder required</div>
+                {pipelineIssues.map(issue => (
+                  <div key={issue} className="text-xs text-amber-400/80">
+                    Pipeline needs: {issue}
+                  </div>
+                ))}
+                <div className="flex items-center gap-3 pt-2">
+                  <span className={`w-3 h-3 rounded-full ${canRunDiscovery ? "bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.5)]" : "bg-amber-400"}`} />
+                  <span className="text-sm">
+                    Discovery: {canRunDiscovery ? "ready" : "needs setup"}
+                  </span>
+                </div>
+                {discoveryIssues.map(issue => (
+                  <div key={issue} className="text-xs text-amber-400/80">
+                    Discovery needs: {issue}
+                  </div>
+                ))}
+                {discoveryMode === "auto" && !inputDir && (
+                  <div className="text-xs text-white/45">
+                    Auto-create discovery does not require an input folder.
+                  </div>
                 )}
                 {logFile && (
                   <div className="mt-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
@@ -1258,9 +1351,9 @@ export default function Page() {
         <footer className="text-center text-xs text-white/30 py-8">
           <div className="flex items-center justify-center gap-2">
             <span>CleanMol Discovery v1.0</span>
-            <span>â€¢</span>
+            <span>|</span>
             <span>Multi-Model Chemistry Dataset Builder</span>
-            <span>â€¢</span>
+            <span>|</span>
             <a
               href="https://github.com/isidoregpt/CleanMol-Discovery"
               target="_blank"
@@ -1269,7 +1362,7 @@ export default function Page() {
             >
               Source / Research License
             </a>
-            <span>â€¢</span>
+            <span>|</span>
             <span>2026</span>
           </div>
         </footer>

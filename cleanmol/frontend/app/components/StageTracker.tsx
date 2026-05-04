@@ -20,20 +20,18 @@ export function StageTracker({ stages }: StageTrackerProps) {
           key={stage.id}
           className={`stage-indicator ${stage.status}`}
         >
-          {/* Icon */}
           <div className={`stage-icon ${stage.status}`}>
             {stage.status === "active" ? (
               <div className="spinner" style={{ width: 16, height: 16 }} />
             ) : stage.status === "completed" ? (
-              "✓"
+              "OK"
             ) : stage.status === "error" ? (
-              "✕"
+              "!"
             ) : (
               stage.icon
             )}
           </div>
 
-          {/* Content */}
           <div className="flex-1">
             <div className="flex items-center justify-between">
               <span className={`font-medium ${stage.status === "pending" ? "text-white/40" : "text-white"}`}>
@@ -41,7 +39,7 @@ export function StageTracker({ stages }: StageTrackerProps) {
               </span>
               <span className="text-xs text-white/40">
                 {stage.status === "completed" && "Done"}
-                {stage.status === "active" && "In Progress..."}
+                {stage.status === "active" && "In progress"}
                 {stage.status === "error" && "Failed"}
               </span>
             </div>
@@ -50,7 +48,6 @@ export function StageTracker({ stages }: StageTrackerProps) {
             )}
           </div>
 
-          {/* Connector line */}
           {i < stages.length - 1 && (
             <div
               className={`absolute left-[31px] top-[52px] w-0.5 h-3 ${
