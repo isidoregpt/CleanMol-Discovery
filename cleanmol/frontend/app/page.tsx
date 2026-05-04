@@ -6,6 +6,8 @@ import { Terminal, TerminalLine } from "./components/Terminal";
 import { StageTracker } from "./components/StageTracker";
 import { StatCard } from "./components/StatCard";
 import { DNALoader } from "./components/DNALoader";
+import { getDefaults } from "./api";
+import type { ModelBundle } from "./api";
 
 const LS = {
   openai: "cleanmol:key:openai",
@@ -16,27 +18,34 @@ const LS = {
   paths: "cleanmol:paths"
 };
 
-const MODEL_DEFAULTS = {
+const FALLBACK_MODEL_DEFAULTS: ModelBundle = {
   primary: "claude-opus-4-7",
   auditor: "gpt-5.5",
-  gapHunter: "gemini-3.1-pro-preview"
+  gapHunter: "gemini-3.1-pro-preview",
+  figure: "claude-sonnet-4-6"
 };
 
-const LEGACY_MODEL_ALIASES: Record<string, string> = {
-  "claude-opus-4-5-20251101": MODEL_DEFAULTS.primary,
-  "claude-opus-4-20250514": MODEL_DEFAULTS.primary,
-  "claude-opus-4-1-20250805": MODEL_DEFAULTS.primary,
-  "gpt-5.2": MODEL_DEFAULTS.auditor,
-  "gpt-5.2-thinking": MODEL_DEFAULTS.auditor,
-  "gpt-5.2-2025-12-11": MODEL_DEFAULTS.auditor,
-  "gemini-3-pro": MODEL_DEFAULTS.gapHunter,
-  "gemini-3-pro-preview": MODEL_DEFAULTS.gapHunter
+const FALLBACK_MODEL_DEFAULTS_LAST_VERIFIED = "2026-05-04";
+
+const FALLBACK_LEGACY_MODEL_ALIASES: Record<string, string> = {
+  "claude-opus-4-5-20251101": FALLBACK_MODEL_DEFAULTS.primary,
+  "claude-opus-4-20250514": FALLBACK_MODEL_DEFAULTS.primary,
+  "claude-opus-4-1-20250805": FALLBACK_MODEL_DEFAULTS.primary,
+  "gpt-5.2": FALLBACK_MODEL_DEFAULTS.auditor,
+  "gpt-5.2-thinking": FALLBACK_MODEL_DEFAULTS.auditor,
+  "gpt-5.2-2025-12-11": FALLBACK_MODEL_DEFAULTS.auditor,
+  "gemini-3-pro": FALLBACK_MODEL_DEFAULTS.gapHunter,
+  "gemini-3-pro-preview": FALLBACK_MODEL_DEFAULTS.gapHunter
 };
 
-function normalizeModelId(value: unknown, fallback: string) {
+function normalizeModelId(
+  value: unknown,
+  fallback: string,
+  aliases: Record<string, string> = FALLBACK_LEGACY_MODEL_ALIASES
+) {
   const model = typeof value === "string" ? value.trim() : "";
   if (!model) return fallback;
-  return LEGACY_MODEL_ALIASES[model] || model;
+  return aliases[model] || model;
 }
 
 const PIPELINE_STAGES = [
@@ -115,9 +124,11 @@ export default function Page() {
   const [hfToken, setHfToken] = useState("");
 
   // Models
-  const [primaryModel, setPrimaryModel] = useState(MODEL_DEFAULTS.primary);
-  const [auditorModel, setAuditorModel] = useState(MODEL_DEFAULTS.auditor);
-  const [gapModel, setGapModel] = useState(MODEL_DEFAULTS.gapHunter);
+  const [modelDefaults, setModelDefaults] = useState<ModelBundle>(FALLBACK_MODEL_DEFAULTS);
+  const [modelDefaultsVerified, setModelDefaultsVerified] = useState(FALLBACK_MODEL_DEFAULTS_LAST_VERIFIED);
+  const [primaryModel, setPrimaryModel] = useState(FALLBACK_MODEL_DEFAULTS.primary);
+  const [auditorModel, setAuditorModel] = useState(FALLBACK_MODEL_DEFAULTS.auditor);
+  const [gapModel, setGapModel] = useState(FALLBACK_MODEL_DEFAULTS.gapHunter);
 
   // Paths
   const [inputDir, setInputDir] = useState("");
@@ -179,9 +190,9 @@ export default function Page() {
     if (m) {
       try {
         const j = JSON.parse(m);
-        setPrimaryModel(normalizeModelId(j.primary, MODEL_DEFAULTS.primary));
-        setAuditorModel(normalizeModelId(j.auditor, MODEL_DEFAULTS.auditor));
-        setGapModel(normalizeModelId(j.gapHunter || j.gap, MODEL_DEFAULTS.gapHunter));
+        setPrimaryModel(normalizeModelId(j.primary, FALLBACK_MODEL_DEFAULTS.primary));
+        setAuditorModel(normalizeModelId(j.auditor, FALLBACK_MODEL_DEFAULTS.auditor));
+        setGapModel(normalizeModelId(j.gapHunter || j.gap, FALLBACK_MODEL_DEFAULTS.gapHunter));
       } catch {}
     }
 
@@ -193,6 +204,53 @@ export default function Page() {
         setOutputDir(j.outputDir || "");
       } catch {}
     }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const previousDefaults = modelDefaults;
+
+    const updateCurrentModel = (
+      current: string,
+      key: "primary" | "auditor" | "gapHunter",
+      models: ModelBundle,
+      aliases: Record<string, string>
+    ) => {
+      const nextDefault = models[key] || FALLBACK_MODEL_DEFAULTS[key];
+      const normalized = normalizeModelId(current, nextDefault, aliases);
+      if (
+        !current ||
+        current === previousDefaults[key] ||
+        current === FALLBACK_MODEL_DEFAULTS[key] ||
+        normalized !== current
+      ) {
+        return normalized || nextDefault;
+      }
+      return current;
+    };
+
+    getDefaults()
+      .then((data) => {
+        if (cancelled) return;
+        const models = { ...FALLBACK_MODEL_DEFAULTS, ...(data.models || {}) };
+        const aliases = { ...FALLBACK_LEGACY_MODEL_ALIASES, ...(data.legacy_model_aliases || {}) };
+
+        setModelDefaults(models);
+        if (data.model_defaults_last_verified) {
+          setModelDefaultsVerified(data.model_defaults_last_verified);
+        }
+
+        setPrimaryModel((current) => updateCurrentModel(current, "primary", models, aliases));
+        setAuditorModel((current) => updateCurrentModel(current, "auditor", models, aliases));
+        setGapModel((current) => updateCurrentModel(current, "gapHunter", models, aliases));
+      })
+      .catch(() => {
+        // The local backend may still be starting; the pinned frontend fallback stays usable.
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Save settings
@@ -597,9 +655,9 @@ export default function Page() {
   }, [outputDir, discoveryRunning, running]);
 
   const useModelDefaults = () => {
-    setPrimaryModel(MODEL_DEFAULTS.primary);
-    setAuditorModel(MODEL_DEFAULTS.auditor);
-    setGapModel(MODEL_DEFAULTS.gapHunter);
+    setPrimaryModel(modelDefaults.primary);
+    setAuditorModel(modelDefaults.auditor);
+    setGapModel(modelDefaults.gapHunter);
   };
 
   return (
@@ -1040,9 +1098,12 @@ export default function Page() {
                   onClick={useModelDefaults}
                   className="text-xs px-3 py-2 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 transition"
                 >
-                  Use 2026 defaults
+                  Use verified defaults
                 </button>
               </div>
+              <p className="text-xs text-white/45 mb-4">
+                Defaults verified {modelDefaultsVerified}; pinned for reproducible runs.
+              </p>
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">

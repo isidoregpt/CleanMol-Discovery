@@ -10,6 +10,14 @@ DEFAULT_MODELS: Dict[str, str] = {
     "figure": "claude-sonnet-4-6",
 }
 
+MODEL_DEFAULTS_LAST_VERIFIED = "2026-05-04"
+
+MODEL_DEFAULT_SOURCE_URLS: Dict[str, str] = {
+    "anthropic": "https://platform.claude.com/docs/en/about-claude/models/overview",
+    "openai": "https://developers.openai.com/api/docs/models",
+    "google": "https://ai.google.dev/gemini-api/docs/models/gemini-3.1-pro-preview",
+}
+
 
 LEGACY_MODEL_ALIASES: Dict[str, str] = {
     "claude-opus-4-5-20251101": DEFAULT_MODELS["primary"],

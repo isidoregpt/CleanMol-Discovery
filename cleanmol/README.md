@@ -23,7 +23,7 @@ CleanMol is a Windows-first desktop application for extracting structured chemis
 
 ## 2026 Default Models
 
-The app keeps model IDs configurable and also upgrades known old IDs automatically.
+The backend is the source of truth for model defaults. The frontend loads those defaults from `/api/defaults` when the local backend starts, while keeping a pinned fallback for offline startup. The IDs are intentionally pinned for reproducible chemistry runs, and known old IDs are upgraded automatically. Last verified against provider docs: 2026-05-04.
 
 | Role | Default model | Why |
 | --- | --- | --- |
@@ -179,11 +179,11 @@ Keys are stored in browser localStorage and sent only to the local backend for p
 
 - Anthropic model overview: https://platform.claude.com/docs/en/about-claude/models/overview
 - OpenAI model overview: https://developers.openai.com/api/docs/models
-- Gemini model overview: https://ai.google.dev/gemini-api/docs/models
+- Gemini 3.1 Pro Preview model page: https://ai.google.dev/gemini-api/docs/models/gemini-3.1-pro-preview
 - ChEMBL downloads: https://chembl.gitbook.io/chembl-interface-documentation/downloads
 - PubChem resources: https://www.ncbi.nlm.nih.gov/guide/chemicals-bioassays/
 - BindingDB info: https://www.bindingdb.org/rwd/bind/info.jsp
 
 ## License
 
-MIT
+CleanMol Discovery is source-available under the CleanMol Discovery Research License. It is free for research, education, nonprofit, and individual use. Commercial use requires a separate written commercial license.
