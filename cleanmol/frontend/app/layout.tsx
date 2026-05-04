@@ -18,8 +18,10 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrains.variable}`}>
-      <body className="min-h-screen antialiased">{children}</body>
+    <html lang="en" className={`${inter.variable} ${jetbrains.variable}`} suppressHydrationWarning>
+      <body className="min-h-screen antialiased" suppressHydrationWarning>
+        {children}
+      </body>
     </html>
   );
 }
