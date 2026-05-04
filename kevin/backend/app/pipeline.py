@@ -21,6 +21,7 @@ from .smiles_validation import validate_and_enrich_smiles
 from .excel_export import create_review_workbook, export_combined_workbook
 from .merge_exports import merge_and_export_datasets
 from .logger import PipelineLogger
+from .model_config import normalize_model_id, normalize_models
 
 
 def _utc_iso() -> str:
@@ -113,8 +114,23 @@ def _get_db_stats(conn) -> dict:
 
 
 def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, options: dict, progress_callback=None) -> dict:
-    input_path = Path(input_dir)
-    out = Path(output_dir)
+    if not input_dir:
+        raise ValueError("Input folder is required.")
+    if not output_dir:
+        raise ValueError("Output folder is required.")
+
+    input_path = Path(input_dir).expanduser()
+    if not input_path.exists():
+        raise ValueError(f"Input folder does not exist: {input_path}")
+    if not input_path.is_dir():
+        raise ValueError(f"Input path is not a folder: {input_path}")
+
+    requested_models = dict(models or {})
+    models = normalize_models(requested_models)
+    keys = keys or {}
+    options = options or {}
+
+    out = Path(output_dir).expanduser()
     bundles_root = out / "bundles"
     bundles_root.mkdir(parents=True, exist_ok=True)
     (out / "logs").mkdir(exist_ok=True)
@@ -125,6 +141,7 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
         "input_dir": input_dir,
         "output_dir": output_dir,
         "models": models,
+        "requested_models": requested_models,
         "keys": keys,
         "options": options
     }
@@ -205,11 +222,14 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
 
                 try:
                     figure_config = options.get("figure_analysis", {})
+                    figure_model = normalize_model_id(
+                        figure_config.get("model") or models.get("figure") or primary_model
+                    )
                     figure_results = analyze_pdf_figures(
                         pdf_path=str(pdf),
                         api_key=anthropic_key,
                         figure_pages=figure_config.get("figure_pages"),
-                        model=figure_config.get("model", primary_model),
+                        model=figure_model,
                         min_image_size=figure_config.get("min_image_size", 200)
                     )
 
@@ -244,7 +264,7 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
                     "reason": "Disabled or no Anthropic key"
                 })
 
-            # Stage 3: Opus Extraction
+            # Stage 3: Primary Extraction
             logger.emit_progress("OPUS", "start", doc_index=doc_index, doc_total=doc_total)
             stage_start = time.time()
             if not (anthropic_key and primary_model):
@@ -261,7 +281,7 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
             extraction_meta = extraction.pop("_meta", {})
             stage_time = time.time() - stage_start
 
-            logger.log_stage("Stage 3: Opus Extraction", {
+            logger.log_stage("Stage 3: Primary Extraction", {
                 "status": "success",
                 "time": stage_time,
                 "model": primary_model,
@@ -276,19 +296,19 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
             logger.emit_progress("OPUS", "end", doc_index=doc_index, doc_total=doc_total,
                                 stats={"molecules": mol_count, "experiments": exp_count})
 
-            # Match figure-extracted SMILES to Opus-extracted molecules
+            # Match figure-extracted SMILES to primary-extracted molecules
             unmatched_figure_compounds = []
             if figure_compounds:
-                opus_molecules = extraction.get("molecules") or []
+                primary_molecules = extraction.get("molecules") or []
                 print(f"  [DEBUG] Figure matching input:")
                 print(f"    - Figure compounds: {len(figure_compounds)}")
-                print(f"    - Opus molecules: {len(opus_molecules)}")
+                print(f"    - Primary molecules: {len(primary_molecules)}")
                 print(f"    - Figure compound names: {[c.get('name', '<no name>') for c in figure_compounds[:5]]}{'...' if len(figure_compounds) > 5 else ''}")
-                print(f"    - Opus molecule IDs: {[m.get('molecule_id', '<no id>') for m in opus_molecules[:5]]}{'...' if len(opus_molecules) > 5 else ''}")
+                print(f"    - Primary molecule IDs: {[m.get('molecule_id', '<no id>') for m in primary_molecules[:5]]}{'...' if len(primary_molecules) > 5 else ''}")
 
                 molecules, matched_count, unmatched_figure_compounds = match_figure_compounds_to_molecules(
                     figure_compounds,
-                    opus_molecules,
+                    primary_molecules,
                     bundle_dir=bundle_dir
                 )
                 extraction["molecules"] = molecules
@@ -309,7 +329,7 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
             _upsert_extraction_into_db(conn, doc_id, extraction)
             print(f"  [DEBUG pipeline:D] After db_upsert: {sum(1 for m in extraction.get('molecules', []) if m.get('smiles'))} have SMILES")
 
-            # Stage 4: GPT Audit
+            # Stage 4: OpenAI Audit
             audit_json = None
             if openai_key and auditor_model:
                 logger.emit_progress("AUDIT", "start", doc_index=doc_index, doc_total=doc_total)
@@ -322,9 +342,9 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
                 audit_meta = audit_json.pop("_meta", {})
                 stage_time = time.time() - stage_start
 
-                _write_bundle_file(bundle_dir, "audit_gpt52.json", audit_json)
+                _write_bundle_file(bundle_dir, "audit_openai.json", audit_json)
 
-                logger.log_stage("Stage 4: GPT-5.2 Audit", {
+                logger.log_stage("Stage 4: OpenAI Audit", {
                     "status": "success",
                     "time": stage_time,
                     "items_audited": audit_meta.get("items_audited", 0),
@@ -385,7 +405,7 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
                 logger.emit_progress("REPAIR", "end", doc_index=doc_index, doc_total=doc_total,
                                     stats={"repaired": repair_meta.get("applied", 0)})
             else:
-                logger.log_stage("Stage 4: GPT-5.2 Audit", {
+                logger.log_stage("Stage 4: OpenAI Audit", {
                     "status": "skipped",
                     "reason": "No OpenAI API key provided"
                 })
@@ -409,9 +429,9 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
                     gap_meta = gaps_json.pop("_meta", {})
                     stage_time = time.time() - stage_start
 
-                    _write_bundle_file(bundle_dir, "gaps_gemini.json", gaps_json)
+                    _write_bundle_file(bundle_dir, "gaps_gap_hunter.json", gaps_json)
 
-                    logger.log_stage("Stage 6: Gemini Gap Hunt", {
+                    logger.log_stage("Stage 6: Gap Hunt", {
                         "status": "success",
                         "time": stage_time,
                         "gaps_identified": gap_meta.get("gaps_identified", 0),
@@ -435,7 +455,7 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
                 except Exception as e:
                     stage_time = time.time() - stage_start
                     logger.log_warning(f"Gap hunter failed: {e}, continuing without gaps", stage="Gemini Gap Hunt")
-                    logger.log_stage("Stage 6: Gemini Gap Hunt", {
+                    logger.log_stage("Stage 6: Gap Hunt", {
                         "status": "error",
                         "time": stage_time,
                         "error": str(e)
@@ -444,7 +464,7 @@ def run_pipeline(*, input_dir: str, output_dir: str, models: dict, keys: dict, o
                                         stats={"gaps": 0})
                     gaps_json = {"gaps": []}
             else:
-                logger.log_stage("Stage 6: Gemini Gap Hunt", {
+                logger.log_stage("Stage 6: Gap Hunt", {
                     "status": "skipped",
                     "reason": "No Google API key provided"
                 })

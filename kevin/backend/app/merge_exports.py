@@ -1,10 +1,14 @@
-"""
+﻿"""
 Merge JSONL exports into unified dataset files.
 
 Reads all JSONL files from output/exports/ and produces:
 1. unified_dataset.xlsx - Excel workbook with 5 sheets
 2. analysis_ready.csv - Flat denormalized format for ML
 3. molecules.smi - SMILES file for Quat Generator
+4. fairchem_uma_candidates.csv - Review sheet for UMA/OMol atomistic modeling
+5. candidate_generation_seed.smi - Modern disinfectant seed molecules for generation
+6. legacy_or_low_priority_molecules.csv - Molecules kept out of the seed set
+7. screening_score_profile.json - Multi-objective discovery scoring profile
 """
 import json
 import csv
@@ -15,6 +19,12 @@ from collections import defaultdict
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+
+from .discovery_filters import (
+    enrich_modern_discovery_fields,
+    is_generation_seed,
+    is_legacy_or_low_priority,
+)
 
 
 # Style definitions (matching excel_export.py)
@@ -210,6 +220,110 @@ def _sanitize_row(row: List[Any]) -> List[Any]:
     return [_sanitize_cell(cell) for cell in row]
 
 
+def _infer_uma_readiness(molecule: Dict[str, Any]) -> Tuple[str, str]:
+    """Classify whether a molecule is ready to become a FairChem UMA input."""
+    smiles = molecule.get("smiles")
+    if not smiles:
+        return "missing_smiles", "No SMILES available."
+
+    if molecule.get("smiles_valid") is False:
+        return "invalid_smiles", molecule.get("smiles_error") or "SMILES failed validation."
+
+    fragment_count = molecule.get("fragment_count")
+    formal_charge = molecule.get("formal_charge")
+
+    if fragment_count is None or formal_charge is None:
+        return (
+            "needs_structure_review",
+            "RDKit charge/fragment metadata is missing; rerun validation with RDKit before preparing UMA inputs.",
+        )
+
+    if fragment_count is not None:
+        try:
+            if int(fragment_count) > 1:
+                return (
+                    "needs_fragment_review",
+                    "Disconnected fragments or salt/counterion detected; decide whether UMA should model the full explicit salt or a selected active fragment.",
+                )
+        except (TypeError, ValueError):
+            pass
+
+    if formal_charge is not None:
+        try:
+            if int(formal_charge) != 0:
+                return (
+                    "needs_charge_review",
+                    "Charged molecule; confirm total_charge and spin_multiplicity before using UMA task omol.",
+                )
+        except (TypeError, ValueError):
+            pass
+
+    return "candidate", "Candidate for RDKit 3D conformer generation and UMA task omol; confirm spin multiplicity."
+
+
+def _build_screening_score_profile(stats: Dict[str, Any]) -> Dict[str, Any]:
+    """Create a model-agnostic score profile for Chemprop/REINVENT candidate ranking."""
+    return {
+        "profile_name": "lysol_2_modern_disinfectant_discovery",
+        "version": "2026-05-04",
+        "purpose": (
+            "Prioritize modern cationic/amphiphilic disinfectant candidates for chemist review, "
+            "not to make claims of safety, efficacy, or synthesizability."
+        ),
+        "recommended_stack": {
+            "activity_predictor": "Chemprop v2 multitask ensemble with a Morgan-fingerprint baseline",
+            "generator": "REINVENT 4 for de novo design, scaffold hopping, R-group replacement, and multi-objective optimization",
+            "physics_filter": "FAIRChem UMA with task omol, using OMol25-style charge/spin-aware molecular inputs",
+            "primary_activity_data": "CleanMol-curated QAC/biocide literature plus PubChem BioAssay and ChEMBL antimicrobial/cytotoxicity rows",
+            "toxicity_selectivity_data": "Tox21/ToxCast, EPA CompTox, ChEMBL cytotoxicity, and hemolysis/selectivity assays",
+        },
+        "seed_policy": {
+            "include": [
+                "candidate_tier == modern_seed",
+                "generation_recommendation == use_as_generation_seed",
+                "valid or RDKit-skipped SMILES with a stable cationic/amphiphilic head group",
+            ],
+            "review_before_include": [
+                "candidate_tier == needs_review",
+                "charged salts with disconnected fragments",
+                "missing charge, counterion, or formulation context",
+            ],
+            "exclude_as_primary_seeds": [
+                "neutral single-nitrogen compounds",
+                "simple amines without a stable cationic head group",
+                "invalid or missing SMILES",
+                "molecules with no modern scaffold tags unless a chemist explicitly promotes them",
+            ],
+        },
+        "reward_terms": [
+            {"name": "broad_spectrum_predicted_activity", "direction": "maximize", "source": "Chemprop multitask output"},
+            {"name": "selectivity_margin", "direction": "maximize", "source": "toxicity/hemolysis vs antimicrobial potency"},
+            {"name": "modern_cationic_amphiphilic_scaffold", "direction": "maximize", "source": "CleanMol modern_disinfectant_score"},
+            {"name": "gemini_or_bis_cationic_diversity", "direction": "reward_moderately", "source": "scaffold tags"},
+            {"name": "novelty_near_known_actives", "direction": "balance", "source": "nearest-neighbor similarity"},
+            {"name": "formulation_compatible_property_window", "direction": "maximize", "source": "RDKit descriptors and reviewer rules"},
+        ],
+        "penalty_terms": [
+            {"name": "neutral_single_nitrogen_or_simple_amine", "direction": "strong_penalty"},
+            {"name": "reactive_or_structural_liability_alert", "direction": "strong_penalty"},
+            {"name": "predicted_cytotoxicity_or_hemolysis", "direction": "strong_penalty"},
+            {"name": "extreme_size_charge_or_lipophilicity", "direction": "penalty"},
+            {"name": "uma_charge_fragment_uncertainty", "direction": "review_or_penalty"},
+        ],
+        "required_lab_packet_fields": [
+            "SMILES and structure image",
+            "candidate_tier and generation_recommendation",
+            "nearest known analogs",
+            "activity prediction with uncertainty",
+            "toxicity/selectivity prediction with uncertainty",
+            "literature evidence trail",
+            "UMA readiness, total charge, spin multiplicity, and fragment notes",
+            "chemist review notes before any lab work",
+        ],
+        "current_export_stats": stats,
+    }
+
+
 def merge_and_export_datasets(output_dir: Path, logger=None) -> dict:
     """
     Merge all JSONL exports into unified dataset files.
@@ -262,6 +376,12 @@ def merge_and_export_datasets(output_dir: Path, logger=None) -> dict:
             res["doc_id"] = doc_id
             all_results.append(res)
 
+    # Attach modern discovery profile fields before any export is written.
+    # This keeps old/simple nitrogen compounds out of the generation seed file
+    # while preserving them as baselines or activity references.
+    for mol in all_molecules:
+        enrich_modern_discovery_fields(mol)
+
     # Build experiment lookup for organism info
     experiment_lookup = {}
     for exp in all_experiments:
@@ -290,6 +410,8 @@ def merge_and_export_datasets(output_dir: Path, logger=None) -> dict:
         "molecules_with_smiles": len(molecules_with_smiles),
         "molecules_without_smiles": len(molecules_without_smiles),
         "unique_smiles": len(seen_smiles_for_count),
+        "modern_seed_candidates": sum(1 for m in all_molecules if is_generation_seed(m)),
+        "legacy_or_low_priority": sum(1 for m in all_molecules if m.get("candidate_tier") == "legacy_or_low_priority"),
         "experiments": len(all_experiments),
         "results": len(all_results),
         "papers_processed": len(doc_ids)
@@ -309,6 +431,8 @@ def merge_and_export_datasets(output_dir: Path, logger=None) -> dict:
         ws_summary.append(["Field", "Value"])
         ws_summary.append(["Total molecules (with SMILES)", len(molecules_with_smiles)])
         ws_summary.append(["Total molecules (without SMILES)", len(molecules_without_smiles)])
+        ws_summary.append(["Modern generation seed candidates", stats["modern_seed_candidates"]])
+        ws_summary.append(["Legacy/low-priority molecules", stats["legacy_or_low_priority"]])
         ws_summary.append(["Total experiments", len(all_experiments)])
         ws_summary.append(["Total results", len(all_results)])
         ws_summary.append(["Papers processed", ", ".join(source_papers.values())])
@@ -321,7 +445,9 @@ def merge_and_export_datasets(output_dir: Path, logger=None) -> dict:
         mol_headers = [
             "source_paper", "molecule_id", "name_as_written", "normalized_name",
             "smiles", "smiles_source", "smiles_confidence", "head_group_class",
-            "chain_lengths", "notes"
+            "chain_lengths", "scaffold_class", "modern_scaffold_tags",
+            "legacy_flags", "modern_disinfectant_score", "candidate_tier",
+            "generation_recommendation", "generation_notes", "notes"
         ]
         ws_mol.append(mol_headers)
 
@@ -349,6 +475,13 @@ def merge_and_export_datasets(output_dir: Path, logger=None) -> dict:
                 mol.get("smiles_confidence", ""),
                 mol.get("head_group_class", ""),
                 mol.get("chain_lengths"),
+                mol.get("scaffold_class", ""),
+                mol.get("modern_scaffold_tags"),
+                mol.get("legacy_flags"),
+                mol.get("modern_disinfectant_score", ""),
+                mol.get("candidate_tier", ""),
+                mol.get("generation_recommendation", ""),
+                mol.get("generation_notes", ""),
                 mol.get("notes", "")
             ]))
 
@@ -516,6 +649,8 @@ def merge_and_export_datasets(output_dir: Path, logger=None) -> dict:
         # Write CSV
         csv_headers = [
             "molecule_id", "name", "smiles", "source_paper", "head_group_class",
+            "scaffold_class", "modern_scaffold_tags", "legacy_flags",
+            "modern_disinfectant_score", "candidate_tier", "generation_recommendation",
             "MIC_S_aureus", "MIC_E_coli", "MIC_P_aeruginosa", "MIC_C_albicans",
             "HC50", "selectivity_index"
         ]
@@ -548,6 +683,12 @@ def merge_and_export_datasets(output_dir: Path, logger=None) -> dict:
                     mol.get("smiles", ""),
                     mol.get("source_paper", ""),
                     _sanitize_cell(mol.get("head_group_class", "")),
+                    _sanitize_cell(mol.get("scaffold_class", "")),
+                    _sanitize_cell(mol.get("modern_scaffold_tags", "")),
+                    _sanitize_cell(mol.get("legacy_flags", "")),
+                    mol.get("modern_disinfectant_score", ""),
+                    mol.get("candidate_tier", ""),
+                    mol.get("generation_recommendation", ""),
                     data["MIC_S_aureus"] if data["MIC_S_aureus"] is not None else "",
                     data["MIC_E_coli"] if data["MIC_E_coli"] is not None else "",
                     data["MIC_P_aeruginosa"] if data["MIC_P_aeruginosa"] is not None else "",
@@ -585,6 +726,141 @@ def merge_and_export_datasets(output_dir: Path, logger=None) -> dict:
         if logger:
             logger.log_warning(error_msg, stage="Merge Exports")
 
+    # ========================================
+    # 4. Create fairchem_uma_candidates.csv
+    # ========================================
+    fairchem_path = output_dir / "fairchem_uma_candidates.csv"
+    try:
+        fairchem_headers = [
+            "molecule_id", "name", "smiles", "source_paper", "doc_id",
+            "candidate_tier", "modern_scaffold_tags", "legacy_flags",
+            "uma_task", "total_charge_hint", "spin_multiplicity_hint",
+            "fragment_count", "atom_count", "readiness_status", "readiness_notes"
+        ]
+
+        seen_smiles = set()
+        with fairchem_path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(fairchem_headers)
+
+            for mol in all_molecules:
+                smiles = mol.get("smiles", "")
+                if not smiles or smiles in seen_smiles:
+                    continue
+                seen_smiles.add(smiles)
+
+                status, notes = _infer_uma_readiness(mol)
+                total_charge = mol.get("formal_charge")
+                if total_charge is None:
+                    total_charge = ""
+
+                writer.writerow([
+                    mol.get("molecule_id", ""),
+                    mol.get("name_as_written", "") or mol.get("normalized_name", ""),
+                    smiles,
+                    mol.get("source_paper", ""),
+                    mol.get("doc_id", ""),
+                    mol.get("candidate_tier", ""),
+                    _sanitize_cell(mol.get("modern_scaffold_tags", "")),
+                    _sanitize_cell(mol.get("legacy_flags", "")),
+                    "omol",
+                    total_charge,
+                    1,
+                    mol.get("fragment_count", ""),
+                    mol.get("atom_count", ""),
+                    status,
+                    notes,
+                ])
+
+        files_created.append(str(fairchem_path))
+    except Exception as e:
+        error_msg = f"FairChem UMA candidate export failed: {e}"
+        errors.append(error_msg)
+        if logger:
+            logger.log_warning(error_msg, stage="Merge Exports")
+
+    # ========================================
+    # 5. Create candidate_generation_seed.smi
+    # ========================================
+    seed_smi_path = output_dir / "candidate_generation_seed.smi"
+    try:
+        seen_smiles = set()
+        with seed_smi_path.open("w", encoding="utf-8") as f:
+            for mol in all_molecules:
+                smiles = mol.get("smiles", "")
+                if not smiles or smiles in seen_smiles or not is_generation_seed(mol):
+                    continue
+                seen_smiles.add(smiles)
+                mol_id = mol.get("molecule_id", "unknown")
+                f.write(f"{smiles}\t{mol_id}\n")
+
+        files_created.append(str(seed_smi_path))
+    except Exception as e:
+        error_msg = f"Generation seed SMI export failed: {e}"
+        errors.append(error_msg)
+        if logger:
+            logger.log_warning(error_msg, stage="Merge Exports")
+
+    # ========================================
+    # 6. Create legacy_or_low_priority_molecules.csv
+    # ========================================
+    legacy_path = output_dir / "legacy_or_low_priority_molecules.csv"
+    try:
+        legacy_headers = [
+            "molecule_id", "name", "smiles", "source_paper", "doc_id",
+            "head_group_class", "modern_disinfectant_score", "candidate_tier",
+            "generation_recommendation", "modern_scaffold_tags", "legacy_flags",
+            "notes"
+        ]
+
+        seen_smiles = set()
+        with legacy_path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(legacy_headers)
+
+            for mol in all_molecules:
+                smiles = mol.get("smiles", "")
+                dedupe_key = smiles or f"{mol.get('doc_id', '')}:{mol.get('molecule_id', '')}"
+                if dedupe_key in seen_smiles or not is_legacy_or_low_priority(mol):
+                    continue
+                seen_smiles.add(dedupe_key)
+
+                writer.writerow([
+                    mol.get("molecule_id", ""),
+                    mol.get("name_as_written", "") or mol.get("normalized_name", ""),
+                    smiles,
+                    mol.get("source_paper", ""),
+                    mol.get("doc_id", ""),
+                    _sanitize_cell(mol.get("head_group_class", "")),
+                    mol.get("modern_disinfectant_score", ""),
+                    mol.get("candidate_tier", ""),
+                    mol.get("generation_recommendation", ""),
+                    _sanitize_cell(mol.get("modern_scaffold_tags", "")),
+                    _sanitize_cell(mol.get("legacy_flags", "")),
+                    mol.get("generation_notes", ""),
+                ])
+
+        files_created.append(str(legacy_path))
+    except Exception as e:
+        error_msg = f"Legacy molecule export failed: {e}"
+        errors.append(error_msg)
+        if logger:
+            logger.log_warning(error_msg, stage="Merge Exports")
+
+    # ========================================
+    # 7. Create screening_score_profile.json
+    # ========================================
+    score_profile_path = output_dir / "screening_score_profile.json"
+    try:
+        score_profile = _build_screening_score_profile(stats)
+        score_profile_path.write_text(json.dumps(score_profile, indent=2), encoding="utf-8")
+        files_created.append(str(score_profile_path))
+    except Exception as e:
+        error_msg = f"Screening score profile export failed: {e}"
+        errors.append(error_msg)
+        if logger:
+            logger.log_warning(error_msg, stage="Merge Exports")
+
     # Log completion
     status = "success" if not errors else "partial"
     if logger:
@@ -603,5 +879,9 @@ def merge_and_export_datasets(output_dir: Path, logger=None) -> dict:
         "stats": stats,
         "unified_excel": str(excel_path) if str(excel_path) in files_created else None,
         "analysis_csv": str(csv_path) if str(csv_path) in files_created else None,
-        "smiles_file": str(smi_path) if str(smi_path) in files_created else None
+        "smiles_file": str(smi_path) if str(smi_path) in files_created else None,
+        "fairchem_uma_candidates": str(fairchem_path) if str(fairchem_path) in files_created else None,
+        "candidate_generation_seed": str(seed_smi_path) if str(seed_smi_path) in files_created else None,
+        "legacy_or_low_priority_molecules": str(legacy_path) if str(legacy_path) in files_created else None,
+        "screening_score_profile": str(score_profile_path) if str(score_profile_path) in files_created else None
     }

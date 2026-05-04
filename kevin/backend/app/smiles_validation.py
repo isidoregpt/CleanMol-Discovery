@@ -3,6 +3,8 @@ SMILES validation and property enrichment using RDKit.
 """
 from typing import Optional
 
+from .discovery_filters import enrich_modern_discovery_fields
+
 
 def validate_and_enrich_smiles(molecules: list, compute_properties: bool = True) -> dict:
     """
@@ -11,6 +13,8 @@ def validate_and_enrich_smiles(molecules: list, compute_properties: bool = True)
     - Validates all SMILES
     - Canonicalizes valid SMILES
     - Computes properties: molecular_weight, molecular_formula, logp, tpsa, num_heavy_atoms
+    - Adds atomistic-modeling hints: formal_charge, fragment_count, atom_count
+    - Adds discovery hints: modern_disinfectant_score, candidate_tier, generation_recommendation
     - Flags invalid SMILES with error messages
 
     Args:
@@ -26,10 +30,29 @@ def validate_and_enrich_smiles(molecules: list, compute_properties: bool = True)
         "valid_smiles": 0,
         "invalid_smiles": 0,
         "properties_computed": 0,
-        "already_validated": 0
+        "already_validated": 0,
+        "modern_seed_candidates": 0,
+        "legacy_or_low_priority": 0
     }
 
     print(f"[VALIDATE] Validating SMILES for {len(molecules)} molecules...")
+
+    def update_discovery_stats(mol: dict) -> None:
+        if mol.get("candidate_tier") == "modern_seed":
+            stats["modern_seed_candidates"] += 1
+        elif mol.get("candidate_tier") == "legacy_or_low_priority":
+            stats["legacy_or_low_priority"] += 1
+
+    def apply_amphiphile_and_discovery(mol: dict) -> None:
+        smiles_value = mol.get("smiles")
+        if smiles_value and mol.get("smiles_valid") is not False:
+            classification = classify_amphiphile(smiles_value)
+            if classification:
+                for key, value in classification.items():
+                    if value is not None and mol.get(key) in (None, ""):
+                        mol[key] = value
+        enrich_modern_discovery_fields(mol)
+        update_discovery_stats(mol)
 
     try:
         from rdkit import Chem
@@ -49,6 +72,7 @@ def validate_and_enrich_smiles(molecules: list, compute_properties: bool = True)
                     mol["smiles_valid"] = True  # Assume valid since we can't check
                     mol["validation_skipped"] = True
                 stats["valid_smiles"] += 1
+            apply_amphiphile_and_discovery(mol)
         print(f"[VALIDATE] Complete (skipped): {stats['with_smiles']} molecules with SMILES, validation skipped")
         return stats
 
@@ -56,6 +80,7 @@ def validate_and_enrich_smiles(molecules: list, compute_properties: bool = True)
         smiles = mol.get("smiles")
 
         if not smiles:
+            apply_amphiphile_and_discovery(mol)
             continue
 
         stats["with_smiles"] += 1
@@ -65,8 +90,28 @@ def validate_and_enrich_smiles(molecules: list, compute_properties: bool = True)
             stats["already_validated"] += 1
             if mol.get("smiles_valid"):
                 stats["valid_smiles"] += 1
+                if compute_properties and any(mol.get(k) is None for k in ("formal_charge", "fragment_count", "atom_count")):
+                    rdkit_mol = Chem.MolFromSmiles(smiles)
+                    if rdkit_mol is not None:
+                        try:
+                            mol["molecular_weight"] = round(Descriptors.ExactMolWt(rdkit_mol), 2)
+                            mol["molecular_formula"] = rdMolDescriptors.CalcMolFormula(rdkit_mol)
+                            mol["logp"] = round(Descriptors.MolLogP(rdkit_mol), 2)
+                            mol["tpsa"] = round(Descriptors.TPSA(rdkit_mol), 2)
+                            mol["num_heavy_atoms"] = rdkit_mol.GetNumHeavyAtoms()
+                            mol["num_rotatable_bonds"] = rdMolDescriptors.CalcNumRotatableBonds(rdkit_mol)
+                            mol["num_h_donors"] = rdMolDescriptors.CalcNumHBD(rdkit_mol)
+                            mol["num_h_acceptors"] = rdMolDescriptors.CalcNumHBA(rdkit_mol)
+                            mol["num_rings"] = rdMolDescriptors.CalcNumRings(rdkit_mol)
+                            mol["formal_charge"] = Chem.GetFormalCharge(rdkit_mol)
+                            mol["fragment_count"] = len(Chem.GetMolFrags(rdkit_mol))
+                            mol["atom_count"] = rdkit_mol.GetNumAtoms()
+                            stats["properties_computed"] += 1
+                        except Exception as e:
+                            print(f"    Warning: Could not compute properties for {mol.get('molecule_id', 'unknown')}: {e}")
             else:
                 stats["invalid_smiles"] += 1
+            apply_amphiphile_and_discovery(mol)
             continue
 
         # Validate with RDKit
@@ -77,6 +122,7 @@ def validate_and_enrich_smiles(molecules: list, compute_properties: bool = True)
                 mol["smiles_valid"] = False
                 mol["smiles_error"] = "Invalid SMILES structure"
                 stats["invalid_smiles"] += 1
+                apply_amphiphile_and_discovery(mol)
                 print(f"    ✗ Invalid: {mol.get('name_as_written', mol.get('molecule_id', 'unknown'))}")
                 continue
 
@@ -98,14 +144,20 @@ def validate_and_enrich_smiles(molecules: list, compute_properties: bool = True)
                     mol["num_h_donors"] = rdMolDescriptors.CalcNumHBD(rdkit_mol)
                     mol["num_h_acceptors"] = rdMolDescriptors.CalcNumHBA(rdkit_mol)
                     mol["num_rings"] = rdMolDescriptors.CalcNumRings(rdkit_mol)
+                    mol["formal_charge"] = Chem.GetFormalCharge(rdkit_mol)
+                    mol["fragment_count"] = len(Chem.GetMolFrags(rdkit_mol))
+                    mol["atom_count"] = rdkit_mol.GetNumAtoms()
                     stats["properties_computed"] += 1
                 except Exception as e:
                     print(f"    Warning: Could not compute properties for {mol.get('molecule_id', 'unknown')}: {e}")
+
+            apply_amphiphile_and_discovery(mol)
 
         except Exception as e:
             mol["smiles_valid"] = False
             mol["smiles_error"] = str(e)
             stats["invalid_smiles"] += 1
+            apply_amphiphile_and_discovery(mol)
             print(f"    ✗ Error validating {mol.get('name_as_written', mol.get('molecule_id', 'unknown'))}: {e}")
 
     print(f"[VALIDATE] Complete: {stats['valid_smiles']}/{stats['with_smiles']} SMILES valid, {stats['properties_computed']} properties computed")
@@ -140,7 +192,10 @@ def compute_molecular_properties(smiles: str) -> Optional[dict]:
             "num_rotatable_bonds": rdMolDescriptors.CalcNumRotatableBonds(mol),
             "num_h_donors": rdMolDescriptors.CalcNumHBD(mol),
             "num_h_acceptors": rdMolDescriptors.CalcNumHBA(mol),
-            "num_rings": rdMolDescriptors.CalcNumRings(mol)
+            "num_rings": rdMolDescriptors.CalcNumRings(mol),
+            "formal_charge": Chem.GetFormalCharge(mol),
+            "fragment_count": len(Chem.GetMolFrags(mol)),
+            "atom_count": mol.GetNumAtoms()
         }
 
     except Exception:

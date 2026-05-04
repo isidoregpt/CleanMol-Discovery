@@ -1,4 +1,4 @@
-import os
+﻿import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -7,7 +7,7 @@ import json
 
 
 class PipelineLogger:
-    """Comprehensive logging system for Kevin pipeline runs."""
+    """Comprehensive logging system for CleanMol pipeline runs."""
 
     def __init__(self, output_dir: str, config: Dict[str, Any], progress_callback: Callable[[str], None] = None):
         self.output_dir = Path(output_dir)
@@ -38,7 +38,7 @@ class PipelineLogger:
 
         # Generate log filename
         timestamp = self.started_at.strftime("%Y-%m-%d_%H-%M-%S")
-        self.log_filename = f"kevin_run_{timestamp}.md"
+        self.log_filename = f"cleanmol_run_{timestamp}.md"
         self.log_path = self.logs_dir / self.log_filename
 
     def _utc_iso(self) -> str:
@@ -152,7 +152,7 @@ class PipelineLogger:
             "duration_sec": round(duration_sec, 2),
             "status": status
         })
-        self._emit(f"API: {provider} {model} ({tokens_in}→{tokens_out} tokens, {duration_sec:.1f}s)")
+        self._emit(f"API: {provider} {model} ({tokens_in}â†’{tokens_out} tokens, {duration_sec:.1f}s)")
 
     def set_db_stats(self, stats: Dict[str, int]):
         """Set database statistics."""
@@ -197,16 +197,16 @@ class PipelineLogger:
         # Determine overall status
         failed_docs = [d for d in self.documents if d["status"] == "failed"]
         if len(failed_docs) == len(self.documents) and len(self.documents) > 0:
-            overall_status = "❌ FAILED"
+            overall_status = "âŒ FAILED"
         elif len(failed_docs) > 0:
-            overall_status = "⚠️ PARTIAL"
+            overall_status = "âš ï¸ PARTIAL"
         elif len(self.errors) > 0:
-            overall_status = "⚠️ COMPLETED WITH ERRORS"
+            overall_status = "âš ï¸ COMPLETED WITH ERRORS"
         else:
-            overall_status = "✅ SUCCESS"
+            overall_status = "âœ… SUCCESS"
 
         # Header
-        lines.append("# Kevin Pipeline Run Log\n")
+        lines.append("# CleanMol Pipeline Run Log\n")
 
         # Run Summary
         lines.append("## Run Summary\n")
@@ -234,9 +234,9 @@ class PipelineLogger:
         # API Keys Status
         keys = self.config.get("keys", {})
         lines.append("## API Keys Status\n")
-        lines.append(f"- **Anthropic:** {'✅ Provided' if keys.get('anthropic') else '❌ Missing'}")
-        lines.append(f"- **OpenAI:** {'✅ Provided' if keys.get('openai') else '❌ Missing'}")
-        lines.append(f"- **Google:** {'✅ Provided' if keys.get('gemini') else '❌ Missing'}\n")
+        lines.append(f"- **Anthropic:** {'âœ… Provided' if keys.get('anthropic') else 'âŒ Missing'}")
+        lines.append(f"- **OpenAI:** {'âœ… Provided' if keys.get('openai') else 'âŒ Missing'}")
+        lines.append(f"- **Google:** {'âœ… Provided' if keys.get('gemini') else 'âŒ Missing'}\n")
 
         lines.append("---\n")
 
@@ -247,7 +247,7 @@ class PipelineLogger:
             lines.append("*No documents were processed.*\n")
 
         for i, doc in enumerate(self.documents, 1):
-            status_icon = "✅" if doc["status"] == "success" else "❌"
+            status_icon = "âœ…" if doc["status"] == "success" else "âŒ"
             lines.append(f"### Document {i}: {doc['filename']}\n")
             lines.append(f"- **Doc ID:** `{doc['doc_id']}`")
             lines.append(f"- **Status:** {status_icon} {doc['status'].upper()}")
@@ -267,11 +267,11 @@ class PipelineLogger:
             for stage_name, stage_data in stages.items():
                 stage_status = stage_data.get("status", "unknown")
                 if stage_status == "success":
-                    status_icon = "✅"
+                    status_icon = "âœ…"
                 elif stage_status == "skipped":
-                    status_icon = "⏭️"
+                    status_icon = "â­ï¸"
                 else:
-                    status_icon = "❌"
+                    status_icon = "âŒ"
 
                 lines.append(f"#### {stage_name}")
                 lines.append(f"- **Status:** {status_icon} {stage_status.upper()}")
@@ -291,7 +291,7 @@ class PipelineLogger:
             lines.append("#### Document Errors")
             if doc.get("errors"):
                 for err in doc["errors"]:
-                    lines.append(f"> ❌ [{err['stage']}] {err['message']}")
+                    lines.append(f"> âŒ [{err['stage']}] {err['message']}")
             else:
                 lines.append("> None")
             lines.append("")
@@ -300,7 +300,7 @@ class PipelineLogger:
             lines.append("#### Document Warnings")
             if doc.get("warnings"):
                 for warn in doc["warnings"]:
-                    lines.append(f"> ⚠️ [{warn['stage']}] {warn['message']}")
+                    lines.append(f"> âš ï¸ [{warn['stage']}] {warn['message']}")
             else:
                 lines.append("> None")
             lines.append("")
@@ -340,7 +340,7 @@ class PipelineLogger:
             lines.append("| Time | Provider | Model | Endpoint | Tokens In | Tokens Out | Duration | Status |")
             lines.append("|------|----------|-------|----------|-----------|------------|----------|--------|")
             for call in self.api_calls:
-                status_icon = "✅" if call["status"] == "success" else "❌"
+                status_icon = "âœ…" if call["status"] == "success" else "âŒ"
                 model_short = call['model'][:25] + "..." if len(call['model']) > 25 else call['model']
                 lines.append(f"| {call['timestamp']} | {call['provider']} | {model_short} | {call['endpoint']} | {call['tokens_in']} | {call['tokens_out']} | {call['duration_sec']}s | {status_icon} |")
         else:
@@ -427,9 +427,9 @@ class PipelineLogger:
 
         # Footer
         lines.append("---\n")
-        lines.append("*Log generated by Kevin v1.0*")
+        lines.append("*Log generated by CleanMol v1.0*")
         lines.append("")
-        lines.append('*For troubleshooting, provide this log to an LLM with the prompt: "Review this Kevin pipeline log and identify any issues or suggest improvements."*')
+        lines.append('*For troubleshooting, provide this log to an LLM with the prompt: "Review this CleanMol pipeline log and identify any issues or suggest improvements."*')
 
         return "\n".join(lines)
 
@@ -440,7 +440,7 @@ class PipelineLogger:
         # Check for missing API keys
         keys = self.config.get("keys", {})
         if not keys.get("openai"):
-            recs.append("Consider adding an OpenAI API key to enable GPT-5.2 audit verification.")
+            recs.append("Consider adding an OpenAI API key to enable audit verification.")
         if not keys.get("gemini"):
             recs.append("Consider adding a Google API key to enable Gemini gap hunting.")
 

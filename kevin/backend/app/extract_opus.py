@@ -11,7 +11,7 @@ from .logger import PipelineLogger
 def run_opus_extraction(*, anthropic_key: str, model: str, bundle_dir: Path,
                         paper_md_path: Path, logger: Optional[PipelineLogger] = None) -> dict:
     """
-    Run Opus extraction on a paper.
+    Run primary extraction on a paper.
 
     Returns:
         dict with extracted data (molecules, experiments, results)
@@ -41,8 +41,8 @@ def run_opus_extraction(*, anthropic_key: str, model: str, bundle_dir: Path,
     text = extract_text_from_response(resp)
     data = parse_json_strict(text)
 
-    (bundle_dir / "extraction_opus.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
-    (bundle_dir / "extraction_opus_raw.txt").write_text(text, encoding="utf-8")
+    (bundle_dir / "extraction_primary.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
+    (bundle_dir / "extraction_primary_raw.txt").write_text(text, encoding="utf-8")
 
     elapsed = time.time() - start_time
 

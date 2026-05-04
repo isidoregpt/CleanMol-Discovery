@@ -10,6 +10,8 @@ from typing import Optional
 
 import fitz  # PyMuPDF
 
+from .model_config import DEFAULT_MODELS
+
 
 # Claude Vision prompt for structure extraction
 STRUCTURE_EXTRACTION_PROMPT = """Analyze this image from a scientific paper. Look for chemical structure diagrams.
@@ -154,7 +156,7 @@ def analyze_image_with_claude(
     image_bytes: bytes,
     image_format: str,
     api_key: str,
-    model: str = "claude-opus-4-5-20251101"
+    model: str = DEFAULT_MODELS["figure"]
 ) -> dict:
     """
     Send image to Claude Vision API with structure extraction prompt.
@@ -264,7 +266,7 @@ def analyze_pdf_figures(
     pdf_path: str,
     api_key: str,
     figure_pages: list = None,
-    model: str = "claude-opus-4-5-20251101",
+    model: str = DEFAULT_MODELS["figure"],
     min_image_size: int = 200
 ) -> dict:
     """

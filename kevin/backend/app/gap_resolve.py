@@ -120,7 +120,7 @@ def resolve_gaps_with_targeted_opus(
     logger: Optional[PipelineLogger] = None,
 ) -> dict:
     """
-    Resolve gaps with targeted Opus extraction.
+    Resolve gaps with targeted primary-model extraction.
 
     Returns:
         dict with updated extraction and resolutions
@@ -194,7 +194,7 @@ def resolve_gaps_with_targeted_opus(
                        for m in (updated.get("molecules") or []) if m.get("smiles")]
     print(f"  [DEBUG resolve_gaps] Returning extraction with {len(outgoing_smiles)} molecules having SMILES: {[x[0] for x in outgoing_smiles]}")
 
-    (bundle_dir / "gap_resolutions_opus.json").write_text(
+    (bundle_dir / "gap_resolutions_primary.json").write_text(
         json.dumps({"resolutions": resolutions, "extraction_after_gap_resolution": updated}, indent=2, ensure_ascii=False),
         encoding="utf-8"
     )

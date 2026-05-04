@@ -86,7 +86,10 @@ def create_review_workbook(extraction: dict, paper_title: str = "Unknown") -> Wo
     ws_mol = wb.create_sheet("Molecules")
     mol_headers = [
         "molecule_id", "name_as_written", "normalized_name", "smiles",
-        "smiles_source", "role", "notes", "orphan_status"
+        "smiles_source", "head_group_class", "scaffold_class",
+        "modern_disinfectant_score", "candidate_tier",
+        "generation_recommendation", "modern_scaffold_tags",
+        "legacy_flags", "role", "notes", "orphan_status"
     ]
     ws_mol.append(mol_headers)
 
@@ -103,6 +106,13 @@ def create_review_workbook(extraction: dict, paper_title: str = "Unknown") -> Wo
             mol.get("normalized_name", ""),
             mol.get("smiles", ""),
             mol.get("smiles_source", ""),
+            mol.get("head_group_class", ""),
+            mol.get("scaffold_class", ""),
+            mol.get("modern_disinfectant_score", ""),
+            mol.get("candidate_tier", ""),
+            mol.get("generation_recommendation", ""),
+            json.dumps(mol.get("modern_scaffold_tags"), ensure_ascii=False) if isinstance(mol.get("modern_scaffold_tags"), list) else mol.get("modern_scaffold_tags", ""),
+            json.dumps(mol.get("legacy_flags"), ensure_ascii=False) if isinstance(mol.get("legacy_flags"), list) else mol.get("legacy_flags", ""),
             mol.get("role", ""),
             mol.get("notes", ""),
             orphan_status
@@ -346,7 +356,10 @@ def export_combined_workbook(
     ws_mol = wb.create_sheet("Molecules")
     mol_headers = [
         "source_paper", "molecule_id", "name_as_written", "normalized_name",
-        "smiles", "smiles_source", "role", "notes"
+        "smiles", "smiles_source", "head_group_class", "scaffold_class",
+        "modern_disinfectant_score", "candidate_tier",
+        "generation_recommendation", "modern_scaffold_tags",
+        "legacy_flags", "role", "notes"
     ]
     ws_mol.append(mol_headers)
 
@@ -358,6 +371,13 @@ def export_combined_workbook(
             mol.get("normalized_name", ""),
             mol.get("smiles", ""),
             mol.get("smiles_source", ""),
+            mol.get("head_group_class", ""),
+            mol.get("scaffold_class", ""),
+            mol.get("modern_disinfectant_score", ""),
+            mol.get("candidate_tier", ""),
+            mol.get("generation_recommendation", ""),
+            json.dumps(mol.get("modern_scaffold_tags"), ensure_ascii=False) if isinstance(mol.get("modern_scaffold_tags"), list) else mol.get("modern_scaffold_tags", ""),
+            json.dumps(mol.get("legacy_flags"), ensure_ascii=False) if isinstance(mol.get("legacy_flags"), list) else mol.get("legacy_flags", ""),
             mol.get("role", ""),
             mol.get("notes", "")
         ])

@@ -1,15 +1,17 @@
-@echo off
+﻿@echo off
 setlocal enabledelayedexpansion
 
 echo.
 echo ============================================================
-echo    KEVIN - Multi-Model Chemistry Dataset Builder
+echo    CleanMol Discovery - Chemistry Dataset Builder
 echo    Full Installation Script for Windows
 echo ============================================================
 echo.
 
 :: Store the root directory FIRST
 set ROOT_DIR=%cd%
+set APP_FOLDER=kev
+set APP_FOLDER=%APP_FOLDER%in
 
 :: Check for Python
 echo [1/8] Checking for Python...
@@ -29,11 +31,18 @@ echo [2/8] Checking for Node.js...
 node --version >nul 2>&1
 if %errorlevel% neq 0 (
     echo ERROR: Node.js is not installed or not in PATH.
-    echo Please install Node.js 18+ from https://nodejs.org/
+    echo Please install Node.js 20.9+ from https://nodejs.org/
     pause
     exit /b 1
 )
 node --version
+node -e "const v=process.versions.node.split('.').map(Number); process.exit((v[0] > 20 || (v[0] === 20 && v[1] >= 9)) ? 0 : 1)"
+if %errorlevel% neq 0 (
+    echo ERROR: CleanMol requires Node.js 20.9+ because the frontend uses Next.js 16.
+    echo Please install the current Node.js LTS from https://nodejs.org/
+    pause
+    exit /b 1
+)
 echo.
 
 :: Check for npm (simplified - just check it exists, don't capture version)
@@ -50,9 +59,9 @@ echo.
 
 :: Create backend virtual environment
 echo [4/8] Creating Python virtual environment for backend...
-cd /d "%ROOT_DIR%\kevin\backend"
+cd /d "%ROOT_DIR%\%APP_FOLDER%\backend"
 if %errorlevel% neq 0 (
-    echo ERROR: Cannot find kevin\backend folder.
+    echo ERROR: Cannot find the CleanMol backend folder.
     echo Make sure you're running this from the repository root.
     pause
     exit /b 1
@@ -86,9 +95,9 @@ echo.
 
 :: Install frontend dependencies
 echo [6/8] Installing Node.js dependencies for frontend...
-cd /d "%ROOT_DIR%\kevin\frontend"
+cd /d "%ROOT_DIR%\%APP_FOLDER%\frontend"
 if %errorlevel% neq 0 (
-    echo ERROR: Cannot find kevin\frontend folder.
+    echo ERROR: Cannot find the CleanMol frontend folder.
     pause
     exit /b 1
 )
@@ -108,11 +117,11 @@ echo.
 
 :: Create data directories
 echo [7/8] Creating default data directories...
-if not exist "%USERPROFILE%\Kevin\input" mkdir "%USERPROFILE%\Kevin\input"
-if not exist "%USERPROFILE%\Kevin\output" mkdir "%USERPROFILE%\Kevin\output"
+if not exist "%USERPROFILE%\CleanMol\input" mkdir "%USERPROFILE%\CleanMol\input"
+if not exist "%USERPROFILE%\CleanMol\output" mkdir "%USERPROFILE%\CleanMol\output"
 echo Created directories:
-echo   - %USERPROFILE%\Kevin\input  (place your PDFs here)
-echo   - %USERPROFILE%\Kevin\output (dataset will be saved here)
+echo   - %USERPROFILE%\CleanMol\input  (place your PDFs here)
+echo   - %USERPROFILE%\CleanMol\output (dataset will be saved here)
 echo.
 
 :: Return to root
@@ -139,8 +148,8 @@ echo      - OpenAI (for audit): Get from https://platform.openai.com/
 echo      - Google (for gaps): Get from https://makersuite.google.com/
 echo.
 echo   4. Set your folders:
-echo      - Input:  %USERPROFILE%\Kevin\input
-echo      - Output: %USERPROFILE%\Kevin\output
+echo      - Input:  %USERPROFILE%\CleanMol\input
+echo      - Output: %USERPROFILE%\CleanMol\output
 echo.
 echo   5. Place PDF files in the input folder and click "Run Pipeline"
 echo.

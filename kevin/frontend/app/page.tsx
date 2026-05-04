@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { ProgressBar } from "./components/ProgressBar";
@@ -8,24 +8,48 @@ import { StatCard } from "./components/StatCard";
 import { DNALoader } from "./components/DNALoader";
 
 const LS = {
-  openai: "kevin:key:openai",
-  anthropic: "kevin:key:anthropic",
-  gemini: "kevin:key:gemini",
-  models: "kevin:models",
-  paths: "kevin:paths"
+  openai: "cleanmol:key:openai",
+  anthropic: "cleanmol:key:anthropic",
+  gemini: "cleanmol:key:gemini",
+  hf: "cleanmol:key:hf",
+  models: "cleanmol:models",
+  paths: "cleanmol:paths"
 };
 
+const MODEL_DEFAULTS = {
+  primary: "claude-opus-4-7",
+  auditor: "gpt-5.5",
+  gapHunter: "gemini-3.1-pro-preview"
+};
+
+const LEGACY_MODEL_ALIASES: Record<string, string> = {
+  "claude-opus-4-5-20251101": MODEL_DEFAULTS.primary,
+  "claude-opus-4-20250514": MODEL_DEFAULTS.primary,
+  "claude-opus-4-1-20250805": MODEL_DEFAULTS.primary,
+  "gpt-5.2": MODEL_DEFAULTS.auditor,
+  "gpt-5.2-thinking": MODEL_DEFAULTS.auditor,
+  "gpt-5.2-2025-12-11": MODEL_DEFAULTS.auditor,
+  "gemini-3-pro": MODEL_DEFAULTS.gapHunter,
+  "gemini-3-pro-preview": MODEL_DEFAULTS.gapHunter
+};
+
+function normalizeModelId(value: unknown, fallback: string) {
+  const model = typeof value === "string" ? value.trim() : "";
+  if (!model) return fallback;
+  return LEGACY_MODEL_ALIASES[model] || model;
+}
+
 const PIPELINE_STAGES = [
-  { id: "pdf", name: "PDF Extraction", icon: "📄" },
-  { id: "figure", name: "Figure Analysis", icon: "🖼️" },
-  { id: "opus", name: "Opus Extraction", icon: "🧬" },
-  { id: "audit", name: "GPT-5.2 Audit", icon: "🔍" },
-  { id: "repair", name: "Auto-Repair", icon: "🔧" },
-  { id: "gap", name: "Gemini Gap Hunt", icon: "🎯" },
-  { id: "resolve", name: "Gap Resolution", icon: "✨" },
-  { id: "smiles", name: "SMILES Lookup", icon: "🔬" },
-  { id: "validate", name: "SMILES Validation", icon: "✓" },
-  { id: "export", name: "Export Dataset", icon: "💾" },
+  { id: "pdf", name: "PDF Extraction", icon: "ðŸ“„" },
+  { id: "figure", name: "Figure Analysis", icon: "ðŸ–¼ï¸" },
+  { id: "opus", name: "Primary Extraction", icon: "ðŸ§¬" },
+  { id: "audit", name: "OpenAI Audit", icon: "ðŸ”" },
+  { id: "repair", name: "Auto-Repair", icon: "ðŸ”§" },
+  { id: "gap", name: "Gemini Gap Hunt", icon: "ðŸŽ¯" },
+  { id: "resolve", name: "Gap Resolution", icon: "âœ¨" },
+  { id: "smiles", name: "SMILES Lookup", icon: "ðŸ”¬" },
+  { id: "validate", name: "SMILES Validation", icon: "âœ“" },
+  { id: "export", name: "Export Dataset", icon: "ðŸ’¾" },
 ];
 
 // Stage weights for weighted progress calculation
@@ -44,6 +68,40 @@ const STAGE_WEIGHTS: Record<string, number> = {
 
 const STAGE_ORDER = ["PDF", "FIGURE", "OPUS", "AUDIT", "REPAIR", "GAP", "RESOLVE", "SMILES", "VALIDATE", "EXPORT"];
 
+type StageStatus = "pending" | "active" | "completed" | "error";
+type StageState = (typeof PIPELINE_STAGES)[number] & {
+  status: StageStatus;
+  detail: string;
+};
+type DiscoveryMode = "auto" | "upload";
+type DiscoveryResult = {
+  ok?: boolean;
+  summary?: Record<string, unknown>;
+  files?: Record<string, string>;
+  dataset_quality?: {
+    status?: string;
+    status_label?: string;
+    quality_score?: number;
+    gates_passed?: number;
+    gates_total?: number;
+    recommendations?: string[];
+  };
+  top_candidates?: Array<Record<string, unknown>>;
+};
+type OnlineSource = {
+  id: string;
+  name: string;
+  connector: string;
+  dataset_id?: string;
+  role?: string;
+  domain_fit?: string;
+  modernity?: string;
+  pull_supported?: boolean;
+  default_selected?: boolean;
+  source_url?: string;
+  use_guidance?: string;
+};
+
 // Creep function: starts fast, slows down, never reaches cap
 function creepProgress(elapsedMs: number, cap = 0.92, speed = 0.0003): number {
   return cap * (1 - Math.exp(-speed * elapsedMs));
@@ -54,11 +112,12 @@ export default function Page() {
   const [openai, setOpenai] = useState("");
   const [anthropic, setAnthropic] = useState("");
   const [gemini, setGemini] = useState("");
+  const [hfToken, setHfToken] = useState("");
 
   // Models
-  const [primaryModel, setPrimaryModel] = useState("claude-opus-4-5-20251101");
-  const [auditorModel, setAuditorModel] = useState("gpt-5.2-2025-12-11");
-  const [gapModel, setGapModel] = useState("gemini-3-pro-preview");
+  const [primaryModel, setPrimaryModel] = useState(MODEL_DEFAULTS.primary);
+  const [auditorModel, setAuditorModel] = useState(MODEL_DEFAULTS.auditor);
+  const [gapModel, setGapModel] = useState(MODEL_DEFAULTS.gapHunter);
 
   // Paths
   const [inputDir, setInputDir] = useState("");
@@ -69,7 +128,7 @@ export default function Page() {
   const [progress, setProgress] = useState(0);
   const [currentStage, setCurrentStage] = useState("");
   const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([]);
-  const [stages, setStages] = useState(
+  const [stages, setStages] = useState<StageState[]>(
     PIPELINE_STAGES.map(s => ({ ...s, status: "pending" as const, detail: "" }))
   );
 
@@ -79,6 +138,23 @@ export default function Page() {
   const [stageStartTime, setStageStartTime] = useState<number | null>(null);
   const [stageProgress, setStageProgress] = useState<Record<string, number>>({});
   const [lastUpdate, setLastUpdate] = useState(Date.now());
+
+  // Discovery automation state
+  const [discoveryMode, setDiscoveryMode] = useState<DiscoveryMode>("auto");
+  const [includePublicSources, setIncludePublicSources] = useState(true);
+  const [allowBuiltinGenerator, setAllowBuiltinGenerator] = useState(true);
+  const [targetCandidateCount, setTargetCandidateCount] = useState(50);
+  const [uploadedDatasetPath, setUploadedDatasetPath] = useState("");
+  const [uploadingDataset, setUploadingDataset] = useState(false);
+  const [discoveryRunning, setDiscoveryRunning] = useState(false);
+  const [discoveryCompleted, setDiscoveryCompleted] = useState(false);
+  const [discoveryResult, setDiscoveryResult] = useState<DiscoveryResult | null>(null);
+  const [discoveryLines, setDiscoveryLines] = useState<TerminalLine[]>([]);
+  const [sourceCatalog, setSourceCatalog] = useState<OnlineSource[]>([]);
+  const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
+  const [sourceQuery, setSourceQuery] = useState("antimicrobial SMILES MIC");
+  const [sourceSearchResults, setSourceSearchResults] = useState<OnlineSource[]>([]);
+  const [sourceLoading, setSourceLoading] = useState(false);
 
   // Results
   const [stats, setStats] = useState({
@@ -97,14 +173,15 @@ export default function Page() {
     setOpenai(localStorage.getItem(LS.openai) || "");
     setAnthropic(localStorage.getItem(LS.anthropic) || "");
     setGemini(localStorage.getItem(LS.gemini) || "");
+    setHfToken(localStorage.getItem(LS.hf) || "");
 
     const m = localStorage.getItem(LS.models);
     if (m) {
       try {
         const j = JSON.parse(m);
-        setPrimaryModel(j.primary || "claude-opus-4-5-20251101");
-        setAuditorModel(j.auditor || "gpt-5.2-thinking");
-        setGapModel(j.gap || "gemini-3-pro");
+        setPrimaryModel(normalizeModelId(j.primary, MODEL_DEFAULTS.primary));
+        setAuditorModel(normalizeModelId(j.auditor, MODEL_DEFAULTS.auditor));
+        setGapModel(normalizeModelId(j.gapHunter || j.gap, MODEL_DEFAULTS.gapHunter));
       } catch {}
     }
 
@@ -124,14 +201,15 @@ export default function Page() {
     localStorage.setItem(LS.openai, openai);
     localStorage.setItem(LS.anthropic, anthropic);
     localStorage.setItem(LS.gemini, gemini);
-  }, [openai, anthropic, gemini]);
+    localStorage.setItem(LS.hf, hfToken);
+  }, [openai, anthropic, gemini, hfToken]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     localStorage.setItem(LS.models, JSON.stringify({
       primary: primaryModel,
       auditor: auditorModel,
-      gap: gapModel
+      gapHunter: gapModel
     }));
   }, [primaryModel, auditorModel, gapModel]);
 
@@ -182,8 +260,65 @@ export default function Page() {
     setTerminalLines(prev => [...prev, { timestamp, type, prefix, text }]);
   }, []);
 
+  const addDiscoveryLog = useCallback((text: string, type: TerminalLine["type"] = "info", prefix?: string) => {
+    const timestamp = new Date().toLocaleTimeString("en-US", { hour12: false });
+    setDiscoveryLines(prev => [...prev, { timestamp, type, prefix, text }]);
+  }, []);
+
+  const loadSourceCatalog = useCallback(async () => {
+    setSourceLoading(true);
+    try {
+      const response = await fetch("http://localhost:8787/api/discovery/source-catalog");
+      if (!response.ok) throw new Error(`Source catalog error: ${response.status}`);
+      const data = await response.json();
+      const sources = (data.sources || []) as OnlineSource[];
+      setSourceCatalog(sources);
+      setSelectedSourceIds(prev => prev.length ? prev : (data.default_source_ids || []));
+    } catch (e: unknown) {
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      addDiscoveryLog(`ERROR: ${errorMessage}`, "error", "SOURCES");
+    } finally {
+      setSourceLoading(false);
+    }
+  }, [addDiscoveryLog]);
+
+  const searchOnlineSources = useCallback(async () => {
+    if (!sourceQuery.trim()) return;
+    setSourceLoading(true);
+    try {
+      const response = await fetch("http://localhost:8787/api/discovery/source-search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: sourceQuery,
+          limit: 10,
+          keys: { hf: hfToken },
+        }),
+      });
+      if (!response.ok) throw new Error(`Source search error: ${response.status}`);
+      const data = await response.json();
+      setSourceSearchResults((data.results || []) as OnlineSource[]);
+      addDiscoveryLog(`Found ${(data.results || []).length} online source candidates`, "success", "SOURCES");
+    } catch (e: unknown) {
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      addDiscoveryLog(`ERROR: ${errorMessage}`, "error", "SOURCES");
+    } finally {
+      setSourceLoading(false);
+    }
+  }, [addDiscoveryLog, hfToken, sourceQuery]);
+
+  const toggleSource = (sourceId: string) => {
+    setSelectedSourceIds(prev =>
+      prev.includes(sourceId) ? prev.filter(id => id !== sourceId) : [...prev, sourceId]
+    );
+  };
+
+  useEffect(() => {
+    loadSourceCatalog();
+  }, [loadSourceCatalog]);
+
   // Update stage status
-  const updateStage = useCallback((stageId: string, status: "pending" | "active" | "completed" | "error", detail?: string) => {
+  const updateStage = useCallback((stageId: string, status: StageStatus, detail?: string) => {
     setStages(prev => prev.map(s =>
       s.id === stageId ? { ...s, status, detail: detail || s.detail } : s
     ));
@@ -218,7 +353,7 @@ export default function Page() {
     setDocTotal(0);
     setStageStartTime(null);
 
-    addLog("Initializing Kevin Pipeline v1.0", "system", "SYSTEM");
+    addLog("Initializing CleanMol Pipeline v1.0", "system", "SYSTEM");
     addLog(`Input: ${inputDir}`, "dim");
     addLog(`Output: ${outputDir}`, "dim");
     addLog("", "dim");
@@ -291,14 +426,14 @@ export default function Page() {
                     const statsStr = data.stats
                       ? ` (${Object.entries(data.stats).map(([k, v]) => `${v} ${k}`).join(", ")})`
                       : "";
-                    addLog(`[${data.doc_index}/${data.doc_total}] ✓ ${data.stage} complete${statsStr}`, "success", data.stage);
+                    addLog(`[${data.doc_index}/${data.doc_total}] âœ“ ${data.stage} complete${statsStr}`, "success", data.stage);
                   }
                 } else if (data.type === "complete") {
                   setProgress(100);
                   addLog("", "dim");
-                  addLog("═══════════════════════════════════════════", "success");
-                  addLog("  PIPELINE COMPLETED SUCCESSFULLY", "success", "✓");
-                  addLog("═══════════════════════════════════════════", "success");
+                  addLog("â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•", "success");
+                  addLog("  PIPELINE COMPLETED SUCCESSFULLY", "success", "âœ“");
+                  addLog("â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•", "success");
 
                   // Extract stats from result
                   const result = data.result;
@@ -317,7 +452,7 @@ export default function Page() {
 
                   setCompleted(true);
                 } else if (data.type === "error") {
-                  addLog(`ERROR: ${data.error}`, "error", "✕");
+                  addLog(`ERROR: ${data.error}`, "error", "âœ•");
                 }
                 // Ignore heartbeat, just updates lastUpdate
               } catch {
@@ -329,16 +464,143 @@ export default function Page() {
       }
     } catch (e: unknown) {
       const errorMessage = e instanceof Error ? e.message : String(e);
-      addLog(`ERROR: ${errorMessage}`, "error", "✕");
+      addLog(`ERROR: ${errorMessage}`, "error", "âœ•");
       updateStage(currentStage ? stageToId[currentStage] || "pdf" : "pdf", "error");
     } finally {
       setRunning(false);
     }
   };
 
+  const uploadDiscoveryDataset = async (file: File | null) => {
+    if (!file) return;
+    if (!outputDir) {
+      addDiscoveryLog("Set an output folder before uploading a dataset.", "error", "UPLOAD");
+      return;
+    }
+
+    setUploadingDataset(true);
+    try {
+      const form = new FormData();
+      form.append("output_dir", outputDir);
+      form.append("file", file);
+      addDiscoveryLog(`Uploading dataset: ${file.name}`, "info", "UPLOAD");
+
+      const response = await fetch("http://localhost:8787/api/discovery/upload-dataset", {
+        method: "POST",
+        body: form,
+      });
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.status}`);
+      }
+      const data = await response.json();
+      setUploadedDatasetPath(data.path || "");
+      addDiscoveryLog(`Uploaded dataset saved to ${data.path}`, "success", "UPLOAD");
+    } catch (e: unknown) {
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      addDiscoveryLog(`ERROR: ${errorMessage}`, "error", "UPLOAD");
+    } finally {
+      setUploadingDataset(false);
+    }
+  };
+
+  const runDiscovery = async () => {
+    setDiscoveryRunning(true);
+    setDiscoveryCompleted(false);
+    setDiscoveryResult(null);
+    setDiscoveryLines([]);
+
+    addDiscoveryLog("Starting automated Discovery workflow", "system", "DISCOVERY");
+    addDiscoveryLog(`Output: ${outputDir}`, "dim");
+    addDiscoveryLog(`Mode: ${discoveryMode}`, "dim");
+    if (uploadedDatasetPath) addDiscoveryLog(`Uploaded dataset: ${uploadedDatasetPath}`, "dim");
+
+    let buffer = "";
+
+    try {
+      const response = await fetch("http://localhost:8787/api/discovery/run-stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          output_dir: outputDir,
+          uploaded_dataset_path: discoveryMode === "upload" ? uploadedDatasetPath : undefined,
+          keys: { hf: hfToken },
+          options: {
+            mode: discoveryMode,
+            include_public_sources: includePublicSources,
+            selected_source_ids: selectedSourceIds,
+            allow_builtin_generator: allowBuiltinGenerator,
+            target_candidate_count: targetCandidateCount,
+            generator_engine: "auto",
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      if (!reader) throw new Error("No response body");
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split("\n\n");
+        buffer = events.pop() || "";
+
+        for (const event of events) {
+          for (const line of event.split("\n")) {
+            if (!line.startsWith("data: ")) continue;
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.type === "discovery_progress") {
+                const statsStr = Object.entries(data)
+                  .filter(([key]) => !["type", "stage", "event", "message"].includes(key))
+                  .map(([key, value]) => `${key}=${value}`)
+                  .join(", ");
+                const message = data.message || `${data.stage} ${data.event}${statsStr ? ` (${statsStr})` : ""}`;
+                addDiscoveryLog(message, data.event === "end" ? "success" : "info", data.stage);
+              } else if (data.type === "discovery_complete") {
+                setDiscoveryResult(data.result);
+                setDiscoveryCompleted(true);
+                addDiscoveryLog("Discovery workflow completed", "success", "DONE");
+                const files = data.result?.files || {};
+                Object.entries(files).forEach(([name, path]) => {
+                  addDiscoveryLog(`${name}: ${path}`, "info", "FILE");
+                });
+              } else if (data.type === "error") {
+                addDiscoveryLog(`ERROR: ${data.error}`, "error", "ERROR");
+              }
+            } catch {
+              // Ignore malformed chunks.
+            }
+          }
+        }
+      }
+    } catch (e: unknown) {
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      addDiscoveryLog(`ERROR: ${errorMessage}`, "error", "ERROR");
+    } finally {
+      setDiscoveryRunning(false);
+    }
+  };
+
   const canRun = useMemo(() => {
     return !!inputDir && !!outputDir && !!anthropic && !!primaryModel;
   }, [inputDir, outputDir, anthropic, primaryModel]);
+
+  const canRunDiscovery = useMemo(() => {
+    return !!outputDir && !discoveryRunning && !running;
+  }, [outputDir, discoveryRunning, running]);
+
+  const useModelDefaults = () => {
+    setPrimaryModel(MODEL_DEFAULTS.primary);
+    setAuditorModel(MODEL_DEFAULTS.auditor);
+    setGapModel(MODEL_DEFAULTS.gapHunter);
+  };
 
   return (
     <div className="min-h-screen relative">
@@ -353,10 +615,10 @@ export default function Page() {
         <header className="flex items-end justify-between gap-4 flex-wrap py-4">
           <div>
             <div className="flex items-center gap-3 mb-3">
-              <div className="text-4xl">🧬</div>
+              <div className="text-4xl">ðŸ§¬</div>
               <div>
                 <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 via-fuchsia-400 to-emerald-400 bg-clip-text text-transparent">
-                  KEVIN
+                  CleanMol Discovery
                 </h1>
                 <p className="text-xs text-white/40 uppercase tracking-widest">
                   Multi-Model Chemistry Dataset Builder
@@ -377,7 +639,7 @@ export default function Page() {
               </>
             ) : (
               <>
-                <span>▶</span>
+                <span>â–¶</span>
                 <span>Run Pipeline</span>
               </>
             )}
@@ -412,10 +674,10 @@ export default function Page() {
             {/* Stats row */}
             {completed && (
               <div className="grid grid-cols-4 gap-4 mt-6 fade-in">
-                <StatCard value={stats.documents} label="Documents" icon="📄" />
-                <StatCard value={stats.molecules} label="Molecules" icon="🧬" />
-                <StatCard value={stats.experiments} label="Experiments" icon="🧪" />
-                <StatCard value={stats.results} label="Results" icon="📊" />
+                <StatCard value={stats.documents} label="Documents" icon="ðŸ“„" />
+                <StatCard value={stats.molecules} label="Molecules" icon="ðŸ§¬" />
+                <StatCard value={stats.experiments} label="Experiments" icon="ðŸ§ª" />
+                <StatCard value={stats.results} label="Results" icon="ðŸ“Š" />
               </div>
             )}
           </section>
@@ -430,11 +692,11 @@ export default function Page() {
             {/* API Keys */}
             <section className="glass-card glass-card-glow p-6">
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <span>🔑</span>
+                <span>ðŸ”‘</span>
                 <span>API Keys</span>
                 <span className="text-xs text-white/40 font-normal ml-2">Stored locally in browser</span>
               </h2>
-              <div className="grid sm:grid-cols-3 gap-4">
+              <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
                     Anthropic <span className="text-cyan-400">*required</span>
@@ -471,13 +733,25 @@ export default function Page() {
                     className="input-field"
                   />
                 </div>
+                <div>
+                  <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
+                    Hugging Face <span className="text-white/30">(datasets)</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={hfToken}
+                    onChange={(e) => setHfToken(e.target.value)}
+                    placeholder="hf_..."
+                    className="input-field"
+                  />
+                </div>
               </div>
             </section>
 
             {/* Folders */}
             <section className="glass-card glass-card-glow p-6">
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <span>📁</span>
+                <span>ðŸ“</span>
                 <span>Directories</span>
               </h2>
               <div className="grid sm:grid-cols-2 gap-4">
@@ -489,7 +763,7 @@ export default function Page() {
                     type="text"
                     value={inputDir}
                     onChange={(e) => setInputDir(e.target.value)}
-                    placeholder="C:\Users\...\Kevin\input"
+                    placeholder="C:\Users\...\CleanMol\input"
                     className="input-field"
                   />
                 </div>
@@ -501,11 +775,244 @@ export default function Page() {
                     type="text"
                     value={outputDir}
                     onChange={(e) => setOutputDir(e.target.value)}
-                    placeholder="C:\Users\...\Kevin\output"
+                    placeholder="C:\Users\...\CleanMol\output"
                     className="input-field"
                   />
                 </div>
               </div>
+            </section>
+
+            {/* Discovery Automation */}
+            <section className="glass-card glass-card-glow p-6">
+              <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+                <h2 className="text-lg font-semibold">Discovery Automation</h2>
+                <button
+                  type="button"
+                  onClick={runDiscovery}
+                  disabled={!canRunDiscovery}
+                  className="btn-primary flex items-center gap-3"
+                >
+                  <span>{discoveryRunning ? "Running..." : "Run Discovery"}</span>
+                </button>
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
+                    Dataset Mode
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setDiscoveryMode("auto")}
+                      className={`px-3 py-2 rounded-lg border transition text-sm ${
+                        discoveryMode === "auto"
+                          ? "bg-cyan-500/20 border-cyan-400/50 text-cyan-100"
+                          : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
+                      }`}
+                    >
+                      Auto-create
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDiscoveryMode("upload")}
+                      className={`px-3 py-2 rounded-lg border transition text-sm ${
+                        discoveryMode === "upload"
+                          ? "bg-cyan-500/20 border-cyan-400/50 text-cyan-100"
+                          : "bg-white/5 border-white/10 text-white/70 hover:bg-white/10"
+                      }`}
+                    >
+                      Chemist upload
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
+                    Candidate Count
+                  </label>
+                  <input
+                    type="number"
+                    min={10}
+                    max={500}
+                    value={targetCandidateCount}
+                    onChange={(e) => setTargetCandidateCount(Math.max(10, Math.min(500, Number(e.target.value) || 50)))}
+                    className="input-field"
+                  />
+                </div>
+              </div>
+
+              {discoveryMode === "upload" && (
+                <div className="mb-4">
+                  <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
+                    Upload CSV or Excel Dataset
+                  </label>
+                  <input
+                    type="file"
+                    accept=".csv,.tsv,.xlsx,.xlsm"
+                    disabled={uploadingDataset || !outputDir}
+                    onChange={(e) => uploadDiscoveryDataset(e.target.files?.[0] || null)}
+                    className="input-field"
+                  />
+                  {uploadedDatasetPath && (
+                    <div className="text-xs text-emerald-300/80 mt-2 break-all">
+                      Loaded: {uploadedDatasetPath}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="grid sm:grid-cols-2 gap-3 mb-4">
+                <label className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/80">
+                  <input
+                    type="checkbox"
+                    checked={includePublicSources}
+                    onChange={(e) => setIncludePublicSources(e.target.checked)}
+                  />
+                  <span>Use public HF/API sources</span>
+                </label>
+                <label className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/80">
+                  <input
+                    type="checkbox"
+                    checked={allowBuiltinGenerator}
+                    onChange={(e) => setAllowBuiltinGenerator(e.target.checked)}
+                  />
+                  <span>Allow built-in generator fallback</span>
+                </label>
+              </div>
+
+              {includePublicSources && (
+                <div className="space-y-4 mb-4">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <h3 className="text-sm font-semibold text-white/80">Source Library</h3>
+                    <button
+                      type="button"
+                      onClick={loadSourceCatalog}
+                      disabled={sourceLoading}
+                      className="text-xs px-3 py-2 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 transition"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-3">
+                    {sourceCatalog.map(source => (
+                      <button
+                        key={source.id}
+                        type="button"
+                        onClick={() => toggleSource(source.id)}
+                        className={`text-left rounded-lg border p-3 transition ${
+                          selectedSourceIds.includes(source.id)
+                            ? "border-cyan-400/50 bg-cyan-500/10"
+                            : "border-white/10 bg-white/5 hover:bg-white/10"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm font-medium text-white/90">{source.name}</span>
+                          <span className="text-[10px] uppercase text-white/40">{source.connector}</span>
+                        </div>
+                        <div className="text-xs text-white/50 mt-1">
+                          {source.role} Â· {source.modernity}
+                        </div>
+                        <div className="text-xs text-white/40 mt-1">
+                          {source.domain_fit}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="grid md:grid-cols-[1fr_auto] gap-2">
+                    <input
+                      type="text"
+                      value={sourceQuery}
+                      onChange={(e) => setSourceQuery(e.target.value)}
+                      className="input-field"
+                      placeholder="Search Hugging Face datasets"
+                    />
+                    <button
+                      type="button"
+                      onClick={searchOnlineSources}
+                      disabled={sourceLoading || !sourceQuery.trim()}
+                      className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 transition text-sm"
+                    >
+                      Search
+                    </button>
+                  </div>
+
+                  {sourceSearchResults.length > 0 && (
+                    <div className="grid md:grid-cols-2 gap-3">
+                      {sourceSearchResults.map(source => (
+                        <button
+                          key={source.id}
+                          type="button"
+                          onClick={() => toggleSource(source.id)}
+                          className={`text-left rounded-lg border p-3 transition ${
+                            selectedSourceIds.includes(source.id)
+                              ? "border-emerald-400/50 bg-emerald-500/10"
+                              : "border-white/10 bg-white/5 hover:bg-white/10"
+                          }`}
+                        >
+                          <div className="text-sm font-medium text-white/90 break-all">{source.name}</div>
+                          <div className="text-xs text-white/50 mt-1">
+                            {source.domain_fit} Â· {source.modernity}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {(discoveryRunning || discoveryCompleted || discoveryLines.length > 0) && (
+                <div className="mt-4">
+                  <Terminal
+                    lines={discoveryLines}
+                    isRunning={discoveryRunning}
+                    title="Discovery Output"
+                  />
+                </div>
+              )}
+
+              {discoveryResult?.summary && (
+                <>
+                  <div className="grid sm:grid-cols-4 gap-3 mt-4">
+                    <StatCard value={Number(discoveryResult.summary.activity_rows || 0)} label="Activity Rows" icon="A" />
+                    <StatCard value={Number(discoveryResult.summary.toxicity_rows || 0)} label="Toxicity Rows" icon="T" />
+                    <StatCard value={Number(discoveryResult.summary.generated_count || 0)} label="Generated" icon="G" />
+                    <StatCard value={Number(discoveryResult.summary.ranked_count || 0)} label="Ranked" icon="R" />
+                  </div>
+
+                  {discoveryResult.dataset_quality && (
+                    <div className="mt-4 rounded-lg border border-white/10 bg-white/5 p-4">
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div>
+                          <div className="text-xs uppercase tracking-wider text-white/40">Dataset Quality Equalizer</div>
+                          <div className="text-xl font-semibold text-white/90">
+                            {discoveryResult.dataset_quality.status_label || "Not Rated"}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-2xl font-bold text-cyan-300">
+                            {Number(discoveryResult.dataset_quality.quality_score || 0).toFixed(0)}
+                          </div>
+                          <div className="text-xs text-white/40">
+                            {discoveryResult.dataset_quality.gates_passed || 0}/{discoveryResult.dataset_quality.gates_total || 0} gates
+                          </div>
+                        </div>
+                      </div>
+                      {!!discoveryResult.dataset_quality.recommendations?.length && (
+                        <div className="mt-3 space-y-1">
+                          {discoveryResult.dataset_quality.recommendations.slice(0, 3).map((rec, idx) => (
+                            <div key={idx} className="text-xs text-white/55">
+                              {rec}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
             </section>
 
             {/* Terminal */}
@@ -523,10 +1030,19 @@ export default function Page() {
 
             {/* Models */}
             <section className="glass-card p-6">
-              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <span>🤖</span>
-                <span>Models</span>
-              </h2>
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <span>ðŸ¤–</span>
+                  <span>Models</span>
+                </h2>
+                <button
+                  type="button"
+                  onClick={useModelDefaults}
+                  className="text-xs px-3 py-2 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 transition"
+                >
+                  Use 2026 defaults
+                </button>
+              </div>
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
@@ -567,7 +1083,7 @@ export default function Page() {
             {/* Stage Tracker */}
             <section className="glass-card p-6">
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <span>📋</span>
+                <span>ðŸ“‹</span>
                 <span>Pipeline Stages</span>
               </h2>
               <StageTracker stages={stages} />
@@ -576,7 +1092,7 @@ export default function Page() {
             {/* Status */}
             <section className="glass-card p-6">
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <span>📡</span>
+                <span>ðŸ“¡</span>
                 <span>Status</span>
               </h2>
               <div className="space-y-3">
@@ -587,13 +1103,13 @@ export default function Page() {
                   </span>
                 </div>
                 {!anthropic && (
-                  <div className="text-xs text-amber-400/80">⚠ Anthropic API key required</div>
+                  <div className="text-xs text-amber-400/80">âš  Anthropic API key required</div>
                 )}
                 {!inputDir && (
-                  <div className="text-xs text-amber-400/80">⚠ Input folder required</div>
+                  <div className="text-xs text-amber-400/80">âš  Input folder required</div>
                 )}
                 {!outputDir && (
-                  <div className="text-xs text-amber-400/80">⚠ Output folder required</div>
+                  <div className="text-xs text-amber-400/80">âš  Output folder required</div>
                 )}
                 {logFile && (
                   <div className="mt-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
@@ -609,10 +1125,10 @@ export default function Page() {
         {/* Footer */}
         <footer className="text-center text-xs text-white/30 py-8">
           <div className="flex items-center justify-center gap-2">
-            <span>KEVIN v1.0</span>
-            <span>•</span>
+            <span>CleanMol Discovery v1.0</span>
+            <span>â€¢</span>
             <span>Multi-Model Chemistry Dataset Builder</span>
-            <span>•</span>
+            <span>â€¢</span>
             <span>2026</span>
           </div>
         </footer>

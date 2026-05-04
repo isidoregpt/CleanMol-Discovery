@@ -1,4 +1,4 @@
-TARGETED_SYSTEM = """You are Kevin, an expert chemist performing targeted extraction on a small page slice.
+﻿TARGETED_SYSTEM = """You are CleanMol, an expert chemist performing targeted extraction on a small page slice.
 Rules:
 - Only use the provided pages for evidence.
 - Do NOT guess.
@@ -21,7 +21,7 @@ Allowed page slice:
 Return JSON ONLY:
 {{
   "additions": {{
-    "molecules": [...same molecule schema as main extractor...],
+    "molecules": [...same molecule schema as main extractor, including scaffold_class, cationic_centers, tail/linker/counterion fields, and generation_relevance...],
     "experiments": [...same experiment schema...],
     "results": [...same result schema...]
   }},

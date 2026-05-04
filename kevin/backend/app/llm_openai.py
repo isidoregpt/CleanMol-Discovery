@@ -2,13 +2,13 @@ import requests
 import time
 from typing import Dict, Any, Tuple
 
-OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
+OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 
 
 def call_openai_responses(*, api_key: str, model: str, instructions: str, input_text: str,
                           reasoning_effort: str = "high", max_output_tokens: int = 6000) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """
-    Call OpenAI Chat Completions API.
+    Call the OpenAI Responses API.
 
     Returns:
         Tuple of (response_json, metadata) where metadata contains:
@@ -21,20 +21,18 @@ def call_openai_responses(*, api_key: str, model: str, instructions: str, input_
     """
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
-    messages = [
-        {"role": "developer", "content": instructions},
-        {"role": "user", "content": input_text}
-    ]
-
     payload = {
         "model": model,
-        "messages": messages,
-        "max_completion_tokens": max_output_tokens,
-        "reasoning_effort": reasoning_effort,
+        "instructions": instructions,
+        "input": input_text,
+        "max_output_tokens": max_output_tokens,
+        "text": {"format": {"type": "json_object"}},
     }
+    if _supports_reasoning_effort(model):
+        payload["reasoning"] = {"effort": reasoning_effort}
 
     start_time = time.time()
-    r = requests.post(OPENAI_CHAT_URL, headers=headers, json=payload, timeout=300)
+    r = requests.post(OPENAI_RESPONSES_URL, headers=headers, json=payload, timeout=300)
     duration = time.time() - start_time
 
     r.raise_for_status()
@@ -43,21 +41,30 @@ def call_openai_responses(*, api_key: str, model: str, instructions: str, input_
     # Extract token usage from response
     usage = resp.get("usage", {})
     metadata = {
-        "tokens_in": usage.get("prompt_tokens", 0),
-        "tokens_out": usage.get("completion_tokens", 0),
+        "tokens_in": usage.get("input_tokens", 0),
+        "tokens_out": usage.get("output_tokens", 0),
         "duration_sec": round(duration, 2),
         "model": model,
-        "endpoint": "/v1/chat/completions",
+        "endpoint": "/v1/responses",
         "provider": "OpenAI"
     }
 
     return resp, metadata
 
 
+def _supports_reasoning_effort(model: str) -> bool:
+    model_id = (model or "").lower()
+    return model_id.startswith(("gpt-5", "o1", "o3", "o4", "gpt-oss"))
+
+
 def extract_output_text(resp: Dict[str, Any]) -> str:
-    """Extract the assistant's response text from chat completions response."""
-    choices = resp.get("choices", [])
-    if not choices:
-        return ""
-    message = choices[0].get("message", {})
-    return message.get("content", "").strip()
+    """Extract assistant text from a Responses API response."""
+    if resp.get("output_text"):
+        return str(resp["output_text"]).strip()
+
+    chunks = []
+    for item in resp.get("output", []) or []:
+        for content in item.get("content", []) or []:
+            if content.get("type") == "output_text":
+                chunks.append(content.get("text", ""))
+    return "".join(chunks).strip()

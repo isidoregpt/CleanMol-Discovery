@@ -1,7 +1,7 @@
-@echo off
+﻿@echo off
 echo.
 echo ============================================================
-echo    KEVIN - Stopping All Servers
+echo    CleanMol Discovery - Stopping All Servers
 echo ============================================================
 echo.
 
@@ -20,9 +20,9 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":3000" ^| findstr "LISTENING
 )
 
 :: Also try to kill any remaining node processes from our app
-taskkill /F /IM "node.exe" /FI "WINDOWTITLE eq Kevin Frontend" >nul 2>&1
+taskkill /F /IM "node.exe" /FI "WINDOWTITLE eq CleanMol Frontend" >nul 2>&1
 
 echo.
-echo All Kevin servers have been stopped.
+echo All CleanMol servers have been stopped.
 echo.
 pause

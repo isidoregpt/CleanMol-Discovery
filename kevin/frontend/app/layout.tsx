@@ -1,4 +1,4 @@
-import "./globals.css";
+﻿import "./globals.css";
 import { Inter, JetBrains_Mono } from "next/font/google";
 
 const inter = Inter({
@@ -12,7 +12,7 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata = {
-  title: "KEVIN — Chemistry Dataset Builder",
+  title: "CleanMol Discovery - Chemistry Dataset Builder",
   description: "Multi-model AI pipeline for chemistry dataset extraction from scientific literature"
 };
 
