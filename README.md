@@ -40,6 +40,52 @@ The Discovery Automation panel supports three data paths:
 
 Both uploaded and auto-created datasets pass through the same Dataset Quality Equalizer. CleanMol labels the packet as `Curated-Grade`, `Strong Starter`, `Useful Starter`, or `Not Ready` so a researcher can see whether the dataset is serious enough for downstream modeling.
 
+## How To Use CleanMol Without Getting Lost
+
+Use this section as the simple map.
+
+### If You Have PDFs
+
+1. Put PDFs in the input folder.
+2. Choose an output folder.
+3. Add an Anthropic key.
+4. Click `Run Pipeline`.
+5. Review the Excel workbook and CSV outputs.
+
+This path turns papers and patents into structured chemistry data.
+
+### If You Have Your Own Dataset
+
+1. Choose an output folder.
+2. Open `Discovery Automation`.
+3. Select `Chemist upload`.
+4. Upload CSV or Excel data.
+5. Click `Run Discovery`.
+6. Review `ranked_lab_candidates_review.xlsx`.
+
+This path lets a chemist use private data while still getting the same CleanMol quality gates.
+
+### If You Do Not Have A Dataset
+
+1. Choose an output folder.
+2. Open `Discovery Automation`.
+3. Select `Auto-create`.
+4. Keep public sources enabled.
+5. Click `Run Discovery`.
+6. Review `dataset_quality_report.json` before trusting any ranking.
+
+This path builds a usable starter packet from CleanMol extracts, curated public sources, Hugging Face/API search, and transparent generated seeds.
+
+### If You Want FairChem / UMA Review
+
+1. Run the pipeline or Discovery Automation first.
+2. Open `fairchem_uma_candidates.csv`.
+3. Review charge, spin, fragments, and readiness notes.
+4. Install FairChem separately only if you are ready to run atomistic modeling.
+5. Treat UMA output as a physics review signal, not as proof of antimicrobial activity.
+
+This path is optional. CleanMol does not require FairChem for normal dataset building or candidate ranking.
+
 ## Modern Disinfectant Focus
 
 CleanMol does not treat "contains nitrogen" as enough. Simple neutral monoamines and legacy single-nitrogen molecules are retained as baseline or activity-reference records, not as primary generation seeds.
@@ -65,6 +111,39 @@ CleanMol is built around a staged discovery approach:
 - Data foundation: CleanMol-curated QAC/biocide literature plus public bioactivity and safety sources such as PubChem BioAssay, ChEMBL, Tox21/ToxCast, EPA CompTox, and hemolysis/selectivity assays where available.
 
 FairChem UMA is used as a downstream atomistic plausibility and conformer/charge/spin review layer. It is not treated as the primary antimicrobial activity model.
+
+## FAIR Chemistry / FairChem Resource
+
+CleanMol incorporates FAIR Chemistry as an optional downstream resource through the Source Library and the `fairchem_uma_candidates.csv` handoff file.
+
+What CleanMol prepares for FairChem:
+
+- `fairchem_uma_candidates.csv`
+- suggested UMA task: `omol`
+- charge and spin hints
+- fragment and salt/counterion review flags
+- invalid or missing SMILES warnings
+- readiness notes for chemist or computational-chemist review
+
+What FairChem can add later:
+
+- atomistic plausibility review
+- conformer and strain checks
+- charge and spin-aware molecule modeling
+- molecular dynamics or energy-style review through ASE
+
+Optional FairChem setup, in plain English:
+
+1. Finish a CleanMol run first.
+2. Ask whether you actually need atomistic modeling yet.
+3. If yes, create a separate FairChem virtual environment.
+4. Install `fairchem-core`.
+5. Request gated access to `facebook/UMA` on Hugging Face.
+6. Use `fairchem_uma_candidates.csv` as the checklist before preparing 3D structures.
+
+FairChem is powerful, but it is not a one-click disinfectant predictor. It should not decide whether a molecule is antimicrobial, safe, synthesizable, or commercially usable. CleanMol keeps it separate so non-technical users can still complete the main discovery workflow without fighting a specialized atomistic ML install.
+
+Apple Silicon note: CleanMol installs and runs on M-Series Macs. Local FairChem/UMA review may run on CPU unless the local PyTorch/FairChem stack supports the hardware acceleration you have configured, so larger UMA batches are better suited to a CUDA workstation or cloud GPU.
 
 ## LLM Model Defaults
 
@@ -106,6 +185,17 @@ Discovery and candidate outputs:
 - `discovery/ranked_lab_candidates_review.xlsx`
 - `discovery/discovery_source_manifest.json`
 - `discovery/dataset_quality_report.json`
+
+What those files help answer:
+
+- `ranked_lab_candidates.csv`: Which molecules should a chemist review first?
+- `ranked_lab_candidates_review.xlsx`: What evidence, scores, and warnings support each candidate?
+- `dataset_quality_report.json`: Is this dataset strong enough to trust as more than a baseline?
+- `discovery_source_manifest.json`: Where did the data come from?
+- `candidate_generation_seed.smi`: Which molecules are suitable seeds for de novo generation?
+- `legacy_or_low_priority_molecules.csv`: Which molecules were retained for reference but not favored as modern leads?
+- `screening_score_profile.json`: How CleanMol weighted activity, toxicity, novelty, scaffold relevance, and review penalties.
+- `fairchem_uma_candidates.csv`: Which candidates are ready, or not ready, for optional FAIR Chemistry UMA review?
 
 ## Quick Start
 
@@ -265,6 +355,13 @@ More detailed notes live in:
 - `cleanmol/docs/lysol_2_discovery_strategy.md`
 - `cleanmol/docs/automated_discovery.md`
 - `cleanmol/docs/fairchem_uma.md`
+
+Helpful external resources:
+
+- FAIR Chemistry install: https://fair-chem.github.io/install/
+- FAIR Chemistry quickstart: https://fair-chem.github.io/quickstart/
+- UMA guide: https://fair-chem.github.io/uma/
+- UMA model access: https://huggingface.co/facebook/UMA
 
 ## License And Credit
 

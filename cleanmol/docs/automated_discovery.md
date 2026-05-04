@@ -158,7 +158,8 @@ CleanMol deliberately does not provide synthesis routes or claim disinfectant pe
 
 - REINVENT 4: https://github.com/MolecularAI/REINVENT4
 - Chemprop: https://chemprop.readthedocs.io/
-- FAIRChem UMA: https://fair-chem.github.io/uma/
+- FAIR Chemistry install: https://fair-chem.github.io/install/
+- FAIR Chemistry UMA: https://fair-chem.github.io/uma/
 - OMol25: https://fair-chem.github.io/omol25/
 - Hugging Face Dataset Viewer API: https://datasets-server.huggingface.co
 - Hugging Face Hub search: https://huggingface.co/docs/hub/search

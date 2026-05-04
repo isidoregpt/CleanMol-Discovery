@@ -57,6 +57,17 @@ See `docs/lysol_2_discovery_strategy.md` for the full model/dataset recommendati
 
 CleanMol now writes `fairchem_uma_candidates.csv` during the merge/export stage. This file is a review sheet for downstream FairChem UMA modeling: it deduplicates validated SMILES, suggests the `omol` UMA task, records charge/spin hints, and flags molecules that need charge or salt/counterion review before 3D atomistic modeling.
 
+Plain-English path:
+
+1. Run CleanMol first.
+2. Open `fairchem_uma_candidates.csv`.
+3. Review `readiness_status` and `readiness_notes`.
+4. Confirm charge, spin multiplicity, salt/counterion handling, and fragments.
+5. Install FairChem separately only if you are ready for atomistic modeling.
+6. Use UMA results as one physics review signal, not as proof of antimicrobial activity.
+
+FairChem is optional. It is not required for PDF extraction, dataset building, Discovery Automation, or Excel review packets. On Apple Silicon / M-Series Macs, CleanMol runs normally, but local FairChem/UMA jobs may use CPU unless your local PyTorch/FairChem setup supports the acceleration you have configured.
+
 For generation, use `candidate_generation_seed.smi` instead of the broad `molecules.smi` file. CleanMol also writes `legacy_or_low_priority_molecules.csv` and `screening_score_profile.json`.
 
 The automated Discovery workflow writes:
@@ -232,6 +243,10 @@ Keys are stored in browser localStorage and sent only to the local backend for p
 - ChEMBL downloads: https://chembl.gitbook.io/chembl-interface-documentation/downloads
 - PubChem resources: https://www.ncbi.nlm.nih.gov/guide/chemicals-bioassays/
 - BindingDB info: https://www.bindingdb.org/rwd/bind/info.jsp
+- FAIR Chemistry install: https://fair-chem.github.io/install/
+- FAIR Chemistry quickstart: https://fair-chem.github.io/quickstart/
+- UMA guide: https://fair-chem.github.io/uma/
+- UMA model access: https://huggingface.co/facebook/UMA
 
 ## License
 

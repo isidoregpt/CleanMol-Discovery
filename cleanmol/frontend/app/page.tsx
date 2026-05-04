@@ -808,14 +808,14 @@ export default function Page() {
               </div>
               <div>
                 <div className="text-xs uppercase tracking-wider text-cyan-300/80 mb-2">3. Review outputs</div>
-                <p>Open the ranked CSV and Excel review packet before any synthesis, safety review, or lab testing decision.</p>
+                <p>Open the ranked CSV and Excel review packet before any synthesis, safety review, or lab testing decision. Use the FAIR Chemistry UMA file only after charge, spin, and fragments are reviewed.</p>
               </div>
             </div>
           )}
 
           {infoPanel === "about" && (
             <p className="text-sm text-white/70">
-              CleanMol Discovery builds auditable chemistry datasets and ranked disinfectant candidate packets for next-generation antimicrobial research. It is meant to help researchers without large private datasets get a serious starting point while keeping provenance, quality gates, and review files visible.
+              CleanMol Discovery builds auditable chemistry datasets and ranked disinfectant candidate packets for next-generation antimicrobial research. It is meant to help researchers without large private datasets get a serious starting point while keeping provenance, quality gates, and review files visible. It also prepares a FAIR Chemistry / UMA handoff file for optional atomistic physics review after candidates are ranked.
             </p>
           )}
 

@@ -92,6 +92,22 @@ CURATED_SOURCE_CATALOG: List[Dict[str, Any]] = [
         "use_guidance": "Cataloged for discovery. CleanMol links this source now; fully automated topical BioAssay pulls need curated AID selection.",
         "source_url": "https://pubchem.ncbi.nlm.nih.gov/docs/bioassays",
     },
+    {
+        "id": "fairchem:uma-omol",
+        "name": "FAIR Chemistry UMA for Molecules",
+        "connector": "fairchem",
+        "role": "physics_review",
+        "domain_fit": "atomistic plausibility review for molecule candidates",
+        "modernity": "current_fairchem_v2_optional",
+        "default_selected": False,
+        "pull_supported": False,
+        "use_guidance": (
+            "Optional downstream physics layer. CleanMol prepares fairchem_uma_candidates.csv; "
+            "install fairchem-core separately and request gated UMA access before running local UMA jobs."
+        ),
+        "source_url": "https://fair-chem.github.io/install/",
+        "docs_url": "https://fair-chem.github.io/quickstart/",
+    },
 ]
 
 
@@ -114,6 +130,7 @@ def source_catalog() -> Dict[str, Any]:
             {"id": "upload", "label": "Upload your own", "description": "Chemist-provided CSV/Excel rows."},
             {"id": "online", "label": "Pull online sources", "description": "Curated public datasets/APIs with provenance."},
             {"id": "auto", "label": "Auto-generate", "description": "CleanMol-created seed and candidate set when data is scarce."},
+            {"id": "physics", "label": "Physics review", "description": "Optional FAIR Chemistry UMA readiness and atomistic review path."},
         ],
     }
 

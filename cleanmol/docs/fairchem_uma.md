@@ -1,115 +1,167 @@
-﻿# FairChem and UMA Integration Notes
+# FAIR Chemistry / FairChem UMA Guide
 
-CleanMol extracts literature-grounded chemistry datasets. FairChem UMA is a downstream atomistic modeling path, not a replacement for CleanMol's extraction/audit LLMs.
+This page is for chemists who see `fairchem_uma_candidates.csv` and wonder what to do with it.
 
-For the actual "Lysol 2.0" discovery model/dataset choice, see `lysol_2_discovery_strategy.md`. The short version: UMA/OMol25 is the best physics layer, but the primary antimicrobial discovery loop should use CleanMol-curated QAC/biocide activity data plus PubChem BioAssay, ChEMBL, and toxicity/selectivity datasets.
+Short version: CleanMol prepares candidates for FAIR Chemistry review. FAIR Chemistry UMA is optional. You do not need it to extract papers, build datasets, auto-create candidates, or open the Excel review packet.
 
-## Why UMA Matters
+## Where FairChem Fits
 
-FAIRChem describes UMA as a universal machine-learning potential for molecules, materials, and catalysts. The UMA docs say the model routes on task, total charge, spin multiplicity, and elemental composition. For CleanMol's current QAC/biocide scope, the closest UMA task is usually `omol`, because it targets organic molecules and molecular chemistry.
+CleanMol answers:
 
-Useful sources:
+1. What molecules, experiments, and results are in my papers?
+2. Which public or uploaded data can support a disinfectant discovery dataset?
+3. Which generated candidates deserve chemist review?
+4. Which candidates have valid SMILES, charge hints, fragment counts, and review notes?
 
-- UMA guide: https://fair-chem.github.io/uma/
-- FairChem docs: https://fair-chem.github.io/
-- UMA model repo: https://huggingface.co/facebook/UMA
-- Leaderboard Space: https://huggingface.co/spaces/facebook/fairchem_leaderboard
+FairChem UMA helps later with:
 
-## CleanMol Output Added For This Path
+1. atomistic structure sanity checks
+2. conformer and strain review
+3. charge and spin-aware molecule modeling
+4. molecular dynamics or energy-style review through ASE
 
-The merge/export stage now writes:
+It does not tell you whether a molecule is safe, disinfectant-active, easy to synthesize, or acceptable for a cleaning product. Those questions still need biological data, formulation science, toxicology, and lab testing.
+
+## The CleanMol File To Use
+
+CleanMol writes:
 
 ```text
 fairchem_uma_candidates.csv
 ```
 
-CleanMol also writes:
+This is the handoff file for FairChem/UMA. It includes:
+
+- `smiles`
+- `uma_task`
+- `total_charge_hint`
+- `spin_multiplicity_hint`
+- `fragment_count`
+- `atom_count`
+- `readiness_status`
+- `readiness_notes`
+
+For CleanMol's disinfectant work, the suggested UMA task is usually:
 
 ```text
-candidate_generation_seed.smi
-legacy_or_low_priority_molecules.csv
-screening_score_profile.json
+omol
 ```
 
-Use `candidate_generation_seed.smi` for modern disinfectant generation work. Use
-`legacy_or_low_priority_molecules.csv` as baseline, negative, or activity-reference material. Do not use
-`molecules.smi` as the primary generation seed file unless a chemist has reviewed the candidate tiers.
+The official FairChem quickstart describes `omol` as the molecules and polymers task.
 
-This file deduplicates validated SMILES and gives each molecule:
+## Readiness Status
 
-- `uma_task`: currently `omol`
-- `total_charge_hint`: RDKit formal charge when available, defaulting to `0`
-- `spin_multiplicity_hint`: default `1`
-- `fragment_count` and `atom_count`
-- `readiness_status` and `readiness_notes`
+Use this as a plain-English checklist:
 
-The important statuses are:
+- `candidate`: reasonable starting point for RDKit 3D conformer generation and UMA review.
+- `needs_structure_review`: rerun or inspect RDKit validation before UMA.
+- `needs_charge_review`: confirm total charge, counterion handling, and spin multiplicity.
+- `needs_fragment_review`: decide whether to model the full salt/counterion system or only the active fragment.
+- `invalid_smiles` or `missing_smiles`: not ready for FairChem.
 
-- `candidate`: likely suitable for RDKit 3D conformer generation before UMA.
-- `needs_structure_review`: RDKit charge/fragment metadata is missing; rerun validation with RDKit.
-- `needs_charge_review`: charged molecule; confirm `total_charge` and spin before UMA.
-- `needs_fragment_review`: salt/counterion or disconnected fragments; decide whether to model the full explicit salt or a selected active fragment.
-- `invalid_smiles` or `missing_smiles`: not ready for atomistic modeling.
+If you are not sure what charge, spin, or counterion to use, stop and ask a computational chemist before running UMA.
 
-## What We Should Not Automate Yet
+## Optional FairChem Install
 
-Do not auto-submit CleanMol outputs to the FairChem leaderboard. The leaderboard expects benchmark prediction files from a model evaluation run, not literature-extracted molecule tables. CleanMol can prepare candidate molecules and provenance, but a separate runner should:
+Do this only if you actually want to run local FairChem/UMA modeling. It is not part of the basic CleanMol install.
 
-1. Generate or import 3D atomistic structures.
-2. Confirm charge and spin multiplicity.
-3. Run FairChem/UMA or a competing model on the relevant benchmark task.
-4. Produce the exact prediction file expected by the leaderboard docs.
-5. Submit only after the user reviews model metadata and visibility.
+The official FairChem docs recommend installing in a virtual environment. They also note that FairChem V2 is a breaking change from V1 and is not compatible with older pretrained models.
 
-## Leaderboard API Shape
+### Step 1: Create A Separate Environment
 
-Validated on May 4, 2026:
+Use a separate environment so FairChem does not disturb the CleanMol app environment.
 
-- API schema: `GET https://facebook-fairchem-leaderboard.hf.space/gradio_api/info`
-- Config: `GET https://facebook-fairchem-leaderboard.hf.space/config`
-- Current submit endpoint: `/add_new_eval`
-- Current dependency id for `/add_new_eval`: `2`
-
-Always fetch `/config` at submission time and find `dependencies[i].id` where `api_name == "add_new_eval"`, because Gradio ids can change.
-
-`/add_new_eval` currently accepts data in this order:
-
-1. uploaded file object
-2. eval type
-3. organization
-4. model name
-5. model/checkpoint URL
-6. paper URL
-7. energy conserving boolean
-8. total energy model boolean
-9. contact email
-10. training set
-11. additional info
-12. submission visibility
-
-File upload:
-
-```text
-POST https://facebook-fairchem-leaderboard.hf.space/gradio_api/upload
-Authorization: Bearer $HF_TOKEN
-files=@prediction_file.ext
+```bash
+python3 -m venv fairchem
+source fairchem/bin/activate
 ```
 
-Use the returned path as:
+On Windows PowerShell:
 
-```json
-{
-  "path": "<returned-path>",
-  "meta": { "_type": "gradio.FileData" },
-  "orig_name": "prediction_file.ext"
-}
+```powershell
+python -m venv fairchem
+.\fairchem\Scripts\activate
 ```
 
-Queue submit:
+The official FairChem example uses Python 3.12. If your computer has several Python versions installed, choose the Python 3.12 executable for this separate environment.
 
-```text
-POST https://facebook-fairchem-leaderboard.hf.space/gradio_api/queue/join
-GET  https://facebook-fairchem-leaderboard.hf.space/gradio_api/queue/data?session_hash=<same-uuid>
+### Step 2: Install FairChem Core
+
+```bash
+pip install fairchem-core
 ```
 
-Authentication requires a Hugging Face token from https://huggingface.co/settings/tokens. UMA model checkpoints are gated, so the user must request access to `facebook/UMA` before local model use.
+FairChem V2 removed several third-party dependencies that previously made installation difficult, so the core install is simpler than older FairChem releases.
+
+### Step 3: Request UMA Access
+
+UMA checkpoints are gated on Hugging Face.
+
+1. Create or sign in to a Hugging Face account.
+2. Request access to `facebook/UMA`.
+3. Create a Hugging Face token with read access for gated repositories.
+4. Log in with the Hugging Face CLI or set `HF_TOKEN`.
+
+```bash
+huggingface-cli login
+```
+
+or:
+
+```bash
+export HF_TOKEN=your_token_here
+```
+
+On Windows PowerShell:
+
+```powershell
+$env:HF_TOKEN="your_token_here"
+```
+
+## First UMA Run Concept
+
+The official quickstart uses ASE and `FAIRChemCalculator`. For molecule work, the concept is:
+
+```python
+from ase.build import molecule
+from fairchem.core import pretrained_mlip, FAIRChemCalculator
+
+predictor = pretrained_mlip.get_predict_unit("uma-s-1p2", device="cuda")
+calc = FAIRChemCalculator(predictor, task_name="omol")
+
+atoms = molecule("H2O")
+atoms.info.update({"charge": 0, "spin": 1})
+atoms.calc = calc
+energy = atoms.get_potential_energy()
+```
+
+On an M-Series Mac, start without `device="cuda"` or use `device="cpu"` unless you have confirmed a supported accelerator path. CPU is slower, but it is a simpler first test. Larger UMA batches are better suited to a CUDA workstation or cloud GPU.
+
+CleanMol does not automatically run this today because a responsible UMA run requires a reviewed 3D structure, charge, spin, salt/counterion decision, and hardware choice.
+
+## How This Helps Lysol 2.0 Discovery
+
+Use FairChem/UMA after CleanMol has narrowed the field.
+
+Recommended order:
+
+1. Use CleanMol to extract and build the dataset.
+2. Use Discovery Automation to rank candidates.
+3. Review `ranked_lab_candidates_review.xlsx`.
+4. Check `fairchem_uma_candidates.csv`.
+5. Promote only reviewed candidates to FairChem/UMA.
+6. Use UMA results as one review signal, not as proof of biological activity.
+
+## Leaderboard Note
+
+Do not auto-submit CleanMol outputs to the FairChem leaderboard. The leaderboard is for benchmark prediction files from a model evaluation run, not literature-extracted molecule tables or early discovery candidates.
+
+If you ever do submit to the leaderboard, fetch the live Gradio config at submission time because dependency IDs can change.
+
+## Official Resources
+
+- FairChem install: https://fair-chem.github.io/install/
+- FairChem quickstart: https://fair-chem.github.io/quickstart/
+- UMA guide: https://fair-chem.github.io/uma/
+- UMA model access: https://huggingface.co/facebook/UMA
+- FairChem leaderboard: https://huggingface.co/spaces/facebook/fairchem_leaderboard

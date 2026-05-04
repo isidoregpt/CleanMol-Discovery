@@ -163,8 +163,9 @@ when an auto-created packet is a starter rather than curated-grade evidence.
 
 ## Sources
 
-- FAIRChem UMA guide: https://fair-chem.github.io/uma/
-- FAIRChem model recommendation: https://fair-chem.github.io/models
+- FAIR Chemistry install: https://fair-chem.github.io/install/
+- FAIR Chemistry quickstart: https://fair-chem.github.io/quickstart/
+- FAIR Chemistry UMA guide: https://fair-chem.github.io/uma/
 - OMol25 dataset docs: https://fair-chem.github.io/omol25
 - OMol25 paper: https://arxiv.org/abs/2505.08762
 - REINVENT 4 paper: https://jcheminf.biomedcentral.com/articles/10.1186/s13321-024-00812-5
