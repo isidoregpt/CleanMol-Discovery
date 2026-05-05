@@ -11,6 +11,7 @@ CleanMol is not a replacement for synthesis planning, toxicology, regulatory rev
 CleanMol Discovery is ready for public review as an early research preview. Reviewers should start here:
 
 - `PUBLIC_REVIEW_DISCLAIMER.md`: what CleanMol can and cannot claim
+- `SECURITY.md`: information security review notes for CISOs and institutional approvers
 - `cleanmol/docs/start_here_public_review.md`: one-page reviewer guide
 - `samples/public_review_demo/`: small synthetic demo output packet
 
@@ -337,6 +338,12 @@ Keys are stored in browser localStorage and sent only to the local backend for p
 
 The app can still open without API keys, but online LLM extraction, provider-latest model resolution, and some online data/model paths require relevant keys.
 
+## Information Security
+
+CleanMol is a local research application, not a hardened enterprise multi-user service. It starts local servers, stores API keys in browser `localStorage`, writes local output files, and may send selected document content or derived chemistry data to third-party providers when users enable those workflows.
+
+CISOs and institutional reviewers should read `SECURITY.md` before approval. That file documents local ports, CORS behavior, credential handling, output retention, external services, dependency supply-chain notes, reduced-egress options, and recommended approval controls.
+
 ## Manual Development Setup
 
 Backend:
@@ -395,6 +402,7 @@ Open `http://localhost:3000`.
 More detailed notes live in:
 
 - `PUBLIC_REVIEW_DISCLAIMER.md`
+- `SECURITY.md`
 - `cleanmol/docs/start_here_public_review.md`
 - `cleanmol/docs/lysol_2_discovery_strategy.md`
 - `cleanmol/docs/automated_discovery.md`

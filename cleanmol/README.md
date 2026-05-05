@@ -7,10 +7,13 @@ CleanMol is a desktop application for Windows and Apple Silicon / M-Series Macs.
 If you are reviewing CleanMol for the first time, start with:
 
 - `../PUBLIC_REVIEW_DISCLAIMER.md`
+- `../SECURITY.md`
 - `docs/start_here_public_review.md`
 - `../samples/public_review_demo/`
 
 The demo packet is synthetic and intentionally not ready for lab use. It shows the output shape without requiring API keys, private PDFs, or a model run.
+
+Security reviewers should read `../SECURITY.md` before approving institutional use. CleanMol is designed for local workstation review, not shared enterprise hosting without additional controls.
 
 ## What It Produces
 
