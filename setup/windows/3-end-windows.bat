@@ -1,4 +1,5 @@
-﻿@echo off
+@echo off
+setlocal
 echo.
 echo ============================================================
 echo    CleanMol Discovery - Stopping All Servers
@@ -21,7 +22,7 @@ for /l %%p in (3000,1,3024) do (
     )
 )
 
-:: Also try to kill any remaining node processes from our app
+:: Also try to kill any remaining node processes from our app.
 taskkill /F /IM "node.exe" /FI "WINDOWTITLE eq CleanMol Frontend" >nul 2>&1
 
 echo.

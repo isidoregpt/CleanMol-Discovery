@@ -8,18 +8,19 @@ echo    Starting Application...
 echo ============================================================
 echo.
 
-:: Store the root directory
-set ROOT_DIR=%cd%
-set APP_FOLDER=cleanmol
+:: Find the project root from this setup\windows folder.
+set "SCRIPT_DIR=%~dp0"
+for %%I in ("%SCRIPT_DIR%..\..") do set "ROOT_DIR=%%~fI"
+set "APP_FOLDER=cleanmol"
 
 :: Check if installation has been done
 if not exist "%ROOT_DIR%\%APP_FOLDER%\backend\.venv" (
-    echo ERROR: Backend not installed. Please run install.bat first.
+    echo ERROR: Backend not installed. Please run 1-install-windows.bat first.
     pause
     exit /b 1
 )
 if not exist "%ROOT_DIR%\%APP_FOLDER%\frontend\node_modules" (
-    echo ERROR: Frontend not installed. Please run install.bat first.
+    echo ERROR: Frontend not installed. Please run 1-install-windows.bat first.
     pause
     exit /b 1
 )
@@ -38,7 +39,7 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":3000" ^| findstr "LISTENING
 :: Start backend server in a new window
 echo.
 echo Starting backend server on http://localhost:8787 ...
-start "CleanMol Backend" cmd /k "cd /d "%ROOT_DIR%\%APP_FOLDER%\backend" && call .venv\Scripts\activate.bat && uvicorn app.main:app --host 127.0.0.1 --port 8787"
+start "CleanMol Backend" cmd /k "cd /d ""%ROOT_DIR%\%APP_FOLDER%\backend"" && call .venv\Scripts\activate.bat && uvicorn app.main:app --host 127.0.0.1 --port 8787"
 
 :: Wait for backend to initialize
 echo Waiting for backend to initialize...
@@ -85,7 +86,7 @@ echo    - "CleanMol Backend" - Python FastAPI server
 echo    - "CleanMol Frontend" - Next.js development server
 echo.
 echo    To stop the application:
-echo    Close both terminal windows, or press Ctrl+C in each.
+echo    Double-click setup\windows\3-end-windows.bat.
 echo.
 echo    Default folders:
 echo    - Input:  %USERPROFILE%\CleanMol\input

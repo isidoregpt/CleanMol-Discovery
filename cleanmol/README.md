@@ -94,37 +94,47 @@ See `docs/fairchem_uma.md` for the FairChem/UMA workflow and the Hugging Face le
 
 ## Quick Start
 
+Open the repository's `setup` folder, then choose the folder for your computer.
+
+```text
+setup/
+  windows/   Use this on a Windows PC
+  mac/       Use this on an Apple Mac
+```
+
+Each folder uses the same order:
+
+1. Install
+2. Run
+3. End when finished
+
 ### Windows Installation
 
 1. Install Python 3.10+ and Node.js 20.9+.
-2. Double-click `install-windows.bat` in the repository root, or run:
+2. Open `setup\windows`.
+3. Double-click:
 
 ```bat
-install-windows.bat
+1-install-windows.bat
 ```
 
 ### Windows Run
 
-1. Double-click `run-windows.bat` in the repository root, or run:
+Double-click:
 
 ```bat
-run-windows.bat
+2-run-windows.bat
 ```
 
-2. Open `http://localhost:3000`.
-3. Enter API keys and folder paths.
-4. Place PDF files in your input folder.
-5. Click `Run Pipeline`.
+Then enter API keys and folder paths in the app.
 
 ### Windows Stop
 
-Close the backend/frontend terminal windows or run:
+Double-click:
 
 ```bat
-stop-windows.bat
+3-end-windows.bat
 ```
-
-`end-windows.bat` is also available as a plain-language stop alias. The older `install.bat`, `run.bat`, and `stop.bat` files remain for compatibility.
 
 ### Mac Installation
 
@@ -134,17 +144,17 @@ stop-windows.bat
 brew install python node
 ```
 
-2. In Terminal, run from the repository root:
+2. In Terminal, run from `setup/mac`:
 
 ```bash
-chmod +x install-mac.command run-mac.command stop-mac.command end-mac.command
-./install-mac.command
+chmod +x 1-install-mac.command 2-run-mac.command 3-end-mac.command
+./1-install-mac.command
 ```
 
 ### Mac Run
 
 ```bash
-./run-mac.command
+./2-run-mac.command
 ```
 
 Then open `http://localhost:3000`. If port 3000 is busy, the Mac runner chooses the next open port from 3000 to 3024 and opens it automatically.
@@ -152,10 +162,8 @@ Then open `http://localhost:3000`. If port 3000 is busy, the Mac runner chooses 
 ### Mac Stop
 
 ```bash
-./stop-mac.command
+./3-end-mac.command
 ```
-
-`./end-mac.command` is also available as a plain-language stop alias.
 
 ## Default Folders
 

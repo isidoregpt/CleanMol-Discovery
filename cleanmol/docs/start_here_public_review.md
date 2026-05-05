@@ -25,28 +25,37 @@ Choose your operating system.
 
 1. Install Python 3.10 or newer.
 2. Install Node.js 20.9 or newer.
-3. Double-click `install-windows.bat`.
-4. Double-click `run-windows.bat`.
-5. Open the local web address shown in the terminal, usually:
+3. Open `setup\windows`.
+4. Double-click `1-install-windows.bat`.
+5. Double-click `2-run-windows.bat`.
+6. Open the local web address shown in the terminal, usually:
 
 ```text
 http://localhost:3000
 ```
 
+When finished, double-click `3-end-windows.bat`.
+
 ### Apple Silicon / M-Series Mac
 
 1. Install Python 3.10 or newer.
 2. Install Node.js 20.9 or newer.
-3. Open Terminal in the CleanMol folder.
+3. Open Terminal in the `setup/mac` folder.
 4. Run:
 
 ```bash
-chmod +x install-mac.command run-mac.command stop-mac.command end-mac.command
-./install-mac.command
-./run-mac.command
+chmod +x 1-install-mac.command 2-run-mac.command 3-end-mac.command
+./1-install-mac.command
+./2-run-mac.command
 ```
 
 The Mac runner opens the app automatically when it can. If port 3000 is busy, it chooses the next open port.
+
+When finished, run:
+
+```bash
+./3-end-mac.command
+```
 
 ## What To Click
 

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 APP_FOLDER="cleanmol"
 BACKEND_DIR="$ROOT_DIR/$APP_FOLDER/backend"
 FRONTEND_DIR="$ROOT_DIR/$APP_FOLDER/frontend"
@@ -17,25 +18,25 @@ echo "============================================================"
 echo
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
-  echo "ERROR: run-mac.command is for macOS."
-  echo "On Windows, use run-windows.bat."
+  echo "ERROR: 2-run-mac.command is for macOS."
+  echo "On Windows, use the files in setup/windows."
   exit 1
 fi
 
 if [[ ! -d "$BACKEND_DIR/.venv" ]]; then
-  echo "ERROR: Backend is not installed. Run ./install-mac.command first."
+  echo "ERROR: Backend is not installed. Run ./1-install-mac.command first."
   exit 1
 fi
 
 if [[ ! -d "$FRONTEND_DIR/node_modules" ]]; then
-  echo "ERROR: Frontend is not installed. Run ./install-mac.command first."
+  echo "ERROR: Frontend is not installed. Run ./1-install-mac.command first."
   exit 1
 fi
 
 mkdir -p "$RUNTIME_DIR"
 
-if [[ -f "$ROOT_DIR/stop-mac.command" ]]; then
-  "$ROOT_DIR/stop-mac.command" --quiet || true
+if [[ -f "$SCRIPT_DIR/3-end-mac.command" ]]; then
+  "$SCRIPT_DIR/3-end-mac.command" --quiet || true
 fi
 
 find_free_port() {
@@ -92,7 +93,7 @@ echo "  Backend:  $BACKEND_LOG"
 echo "  Frontend: $FRONTEND_LOG"
 echo
 echo "To stop CleanMol:"
-echo "  ./stop-mac.command"
+echo "  ./3-end-mac.command"
 echo
 
 open "http://localhost:$FRONTEND_PORT" >/dev/null 2>&1 || true

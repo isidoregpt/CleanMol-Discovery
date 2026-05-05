@@ -209,33 +209,61 @@ What those files help answer:
 
 ## Quick Start
 
-Use the script for your operating system.
+Open the `setup` folder, then choose the folder for your computer.
+
+```text
+setup/
+  windows/   Use this on a Windows PC
+  mac/       Use this on an Apple Mac
+```
+
+Each operating-system folder uses the same simple order:
+
+1. Install CleanMol
+2. Run CleanMol
+3. End CleanMol when finished
+
+If you are helping a non-technical reviewer, the plain instruction is:
+
+```text
+Open setup.
+Open windows or mac.
+Click 1 to install.
+Click 2 to run.
+Click 3 when done.
+```
 
 ### Windows
 
+Open:
+
+```text
+setup\windows
+```
+
+Install:
+
 ```bat
-install-windows.bat
+1-install-windows.bat
 ```
 
 Run:
 
 ```bat
-run-windows.bat
+2-run-windows.bat
 ```
 
-Then open:
+The app opens in the browser. If needed, open:
 
 ```text
 http://localhost:3000
 ```
 
-Stop:
+End / stop:
 
 ```bat
-stop-windows.bat
+3-end-windows.bat
 ```
-
-`end-windows.bat` is also available as a plain-language stop alias.
 
 The installer creates default working folders under:
 
@@ -244,35 +272,37 @@ C:\Users\YourName\CleanMol\input
 C:\Users\YourName\CleanMol\output
 ```
 
-The older `install.bat`, `run.bat`, and `stop.bat` files remain for compatibility, but the `*-windows.bat` names are clearer.
-
 ### Apple Silicon / M-Series Mac
 
-Open Terminal in the repository root. If needed, make the scripts executable:
+Open Terminal in:
+
+```text
+setup/mac
+```
+
+If needed, make the scripts executable:
 
 ```bash
-chmod +x install-mac.command run-mac.command stop-mac.command end-mac.command
+chmod +x 1-install-mac.command 2-run-mac.command 3-end-mac.command
 ```
 
 Install:
 
 ```bash
-./install-mac.command
+./1-install-mac.command
 ```
 
 Run:
 
 ```bash
-./run-mac.command
+./2-run-mac.command
 ```
 
-Stop:
+End / stop:
 
 ```bash
-./stop-mac.command
+./3-end-mac.command
 ```
-
-`./end-mac.command` is also available as a plain-language stop alias.
 
 The Mac installer creates default working folders under:
 
@@ -346,17 +376,16 @@ Open `http://localhost:3000`.
   samples/
     public_review_demo/
                     Synthetic sample output packet for public reviewers
-  install.bat       Windows installer
-  install-windows.bat
-  install-mac.command
-  run.bat           Starts backend and frontend
-  run-windows.bat
-  run-mac.command
-  stop.bat          Stops local app processes
-  stop-windows.bat
-  stop-mac.command
-  end-windows.bat
-  end-mac.command
+  setup/
+    README.md       Which setup folder to use
+    windows/
+      1-install-windows.bat
+      2-run-windows.bat
+      3-end-windows.bat
+    mac/
+      1-install-mac.command
+      2-run-mac.command
+      3-end-mac.command
   LICENSE           CleanMol Discovery Research License
   CITATION.cff      Scholarly citation metadata
 ```

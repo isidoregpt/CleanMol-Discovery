@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 APP_FOLDER="cleanmol"
 BACKEND_DIR="$ROOT_DIR/$APP_FOLDER/backend"
 FRONTEND_DIR="$ROOT_DIR/$APP_FOLDER/frontend"
@@ -14,8 +15,8 @@ echo "============================================================"
 echo
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
-  echo "ERROR: install-mac.command is for macOS."
-  echo "On Windows, use install-windows.bat."
+  echo "ERROR: 1-install-mac.command is for macOS."
+  echo "On Windows, use the files in setup/windows."
   exit 1
 fi
 
@@ -108,13 +109,13 @@ echo "   INSTALLATION SUCCESSFUL"
 echo "============================================================"
 echo
 echo "Next steps:"
-echo "  1. Run:  ./run-mac.command"
-echo "  2. Open: http://localhost:3000"
+echo "  1. Run:  ./2-run-mac.command"
+echo "  2. The app opens in your browser. Usually it uses http://localhost:3000"
 echo "  3. Add API keys in the app."
 echo "  4. Use these folders if you want defaults:"
 echo "     Input:  $HOME/CleanMol/input"
 echo "     Output: $HOME/CleanMol/output"
 echo
 echo "If macOS says this file is not executable, run:"
-echo "  chmod +x install-mac.command run-mac.command stop-mac.command"
+echo "  chmod +x 1-install-mac.command 2-run-mac.command 3-end-mac.command"
 echo

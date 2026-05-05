@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 RUNTIME_DIR="$ROOT_DIR/.cleanmol-runtime"
 PID_FILE="$RUNTIME_DIR/pids"
 QUIET="${1:-}"

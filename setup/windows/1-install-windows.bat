@@ -8,9 +8,10 @@ echo    Full Installation Script for Windows
 echo ============================================================
 echo.
 
-:: Store the root directory FIRST
-set ROOT_DIR=%cd%
-set APP_FOLDER=cleanmol
+:: Find the project root from this setup\windows folder.
+set "SCRIPT_DIR=%~dp0"
+for %%I in ("%SCRIPT_DIR%..\..") do set "ROOT_DIR=%%~fI"
+set "APP_FOLDER=cleanmol"
 
 :: Check for Python
 echo [1/8] Checking for Python...
@@ -61,7 +62,7 @@ echo [4/8] Creating Python virtual environment for backend...
 cd /d "%ROOT_DIR%\%APP_FOLDER%\backend"
 if %errorlevel% neq 0 (
     echo ERROR: Cannot find the CleanMol backend folder.
-    echo Make sure you're running this from the repository root.
+    echo Make sure this file is still inside setup\windows in the CleanMol folder.
     pause
     exit /b 1
 )
@@ -136,7 +137,7 @@ echo.
 echo Next steps:
 echo.
 echo   1. Run the application:
-echo      Double-click "run.bat" or run it from command prompt
+echo      Double-click "2-run-windows.bat" in this same setup\windows folder.
 echo.
 echo   2. Open your browser to:
 echo      http://localhost:3000
@@ -151,6 +152,9 @@ echo      - Input:  %USERPROFILE%\CleanMol\input
 echo      - Output: %USERPROFILE%\CleanMol\output
 echo.
 echo   5. Place PDF files in the input folder and click "Run Pipeline"
+echo.
+echo   6. When you are done:
+echo      Double-click "3-end-windows.bat" in this same setup\windows folder.
 echo.
 echo ============================================================
 echo.
