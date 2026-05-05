@@ -1,0 +1,2 @@
+molecule_id,name,smiles,source_paper,doc_id,head_group_class,modern_disinfectant_score,candidate_tier,generation_recommendation,modern_scaffold_tags,legacy_flags,notes
+DEMO-LEGACY-001,demo_simple_amine,CCCCCCCCCCN,synthetic public review demo,demo,neutral_amine,18,legacy_or_low_priority,keep_as_baseline_reference,[],"[""neutral_single_nitrogen_or_simple_amine""]","Demo only. Included to show how old/simple nitrogen compounds are separated from modern seed candidates."

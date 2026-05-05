@@ -1,0 +1,20 @@
+{
+  "status": "demo_success",
+  "elapsed_seconds": 0.0,
+  "activity_rows": 4,
+  "toxicity_rows": 3,
+  "seed_count": 4,
+  "generated_count": 5,
+  "ranked_count": 5,
+  "generator_engine": "cleanmol_builtin_de_novo_demo",
+  "reinvent_status": "not_run_for_demo_packet",
+  "predictor_status": "demo_scores_only",
+  "activity_baseline_examples": 0,
+  "toxicity_baseline_examples": 0,
+  "dataset_quality_status": "not_ready",
+  "dataset_quality_label": "Not Ready",
+  "dataset_quality_score": 21.5,
+  "dataset_quality_gates": "1/10",
+  "safety_note": "Generated candidates are hypotheses for qualified chemist review; no synthesis instructions or efficacy claims are provided.",
+  "demo_warning": "This packet demonstrates output shape only and is not measured evidence."
+}

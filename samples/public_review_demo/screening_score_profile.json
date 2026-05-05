@@ -1,0 +1,17 @@
+{
+  "profile_name": "cleanmol_public_review_demo_profile",
+  "profile_type": "illustrative_demo_not_validated_model",
+  "intended_use": "Show reviewers the shape of CleanMol scoring outputs without claiming efficacy.",
+  "weights": {
+    "activity_prior": 0.42,
+    "selectivity_prior": 0.25,
+    "modern_disinfectant_score": 0.20,
+    "novelty": 0.08,
+    "toxicity_risk_penalty": -0.05
+  },
+  "warnings": [
+    "Demo scores are not measured antimicrobial results.",
+    "Candidate rankings are triage signals for qualified review only.",
+    "No synthesis, safety, regulatory, or product-readiness claim is made."
+  ]
+}

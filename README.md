@@ -6,6 +6,16 @@ The project is designed for the "Lysol 2.0" problem: helping researchers move fr
 
 CleanMol is not a replacement for synthesis planning, toxicology, regulatory review, or laboratory validation. It is a dataset-building and candidate-prioritization system meant to make early discovery more accessible, auditable, and modern.
 
+## Public Review Preview
+
+CleanMol Discovery is ready for public review as an early research preview. Reviewers should start here:
+
+- `PUBLIC_REVIEW_DISCLAIMER.md`: what CleanMol can and cannot claim
+- `cleanmol/docs/start_here_public_review.md`: one-page reviewer guide
+- `samples/public_review_demo/`: small synthetic demo output packet
+
+The demo packet is intentionally synthetic and labeled `Not Ready`. It exists to show output shape, file meaning, quality gates, and FAIR Chemistry / UMA readiness notes without requiring API keys, private papers, or a long model run.
+
 ## Who It Is For
 
 - Chemists with papers and PDFs who need structured molecule, assay, and result tables.
@@ -333,6 +343,9 @@ Open `http://localhost:3000`.
     backend/        FastAPI pipeline, model resolution, extraction, exports
     frontend/       Next.js desktop-style UI
     docs/           Discovery strategy, automation, and FairChem/UMA notes
+  samples/
+    public_review_demo/
+                    Synthetic sample output packet for public reviewers
   install.bat       Windows installer
   install-windows.bat
   install-mac.command
@@ -352,9 +365,15 @@ Open `http://localhost:3000`.
 
 More detailed notes live in:
 
+- `PUBLIC_REVIEW_DISCLAIMER.md`
+- `cleanmol/docs/start_here_public_review.md`
 - `cleanmol/docs/lysol_2_discovery_strategy.md`
 - `cleanmol/docs/automated_discovery.md`
 - `cleanmol/docs/fairchem_uma.md`
+
+Sample outputs:
+
+- `samples/public_review_demo/`
 
 Helpful external resources:
 

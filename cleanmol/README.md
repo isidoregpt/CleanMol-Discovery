@@ -2,6 +2,16 @@
 
 CleanMol is a desktop application for Windows and Apple Silicon / M-Series Macs. It extracts structured chemistry datasets from born-digital PDFs and turns papers and patents into auditable records for molecules, experiments, numeric results, evidence snippets, SMILES enrichment, and review workbooks.
 
+## Public Review Starting Points
+
+If you are reviewing CleanMol for the first time, start with:
+
+- `../PUBLIC_REVIEW_DISCLAIMER.md`
+- `docs/start_here_public_review.md`
+- `../samples/public_review_demo/`
+
+The demo packet is synthetic and intentionally not ready for lab use. It shows the output shape without requiring API keys, private PDFs, or a model run.
+
 ## What It Produces
 
 - SQLite database: `dataset.db`

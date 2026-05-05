@@ -815,7 +815,7 @@ export default function Page() {
 
           {infoPanel === "about" && (
             <p className="text-sm text-white/70">
-              CleanMol Discovery builds auditable chemistry datasets and ranked disinfectant candidate packets for next-generation antimicrobial research. It is meant to help researchers without large private datasets get a serious starting point while keeping provenance, quality gates, and review files visible. It also prepares a FAIR Chemistry / UMA handoff file for optional atomistic physics review after candidates are ranked.
+              CleanMol Discovery builds auditable chemistry datasets and ranked disinfectant candidate packets for next-generation antimicrobial research. It is a public review preview for dataset building, candidate prioritization, and research support, not proof of efficacy, safety, synthesis feasibility, or regulatory readiness. It also prepares a FAIR Chemistry / UMA handoff file for optional atomistic physics review after candidates are ranked.
             </p>
           )}
 
