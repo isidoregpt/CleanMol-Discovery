@@ -14,6 +14,7 @@ Each folder uses the same plain order:
 1. Install CleanMol
 2. Run CleanMol
 3. End CleanMol when finished
+4. Optional: install the Advanced Discovery Pack only if you need Chemprop/advanced modeling
 
 If you are helping someone non-technical, tell them:
 
@@ -26,3 +27,5 @@ Click 3 when you are done.
 ```
 
 If step 1 says Python or Node.js is missing, install the missing item and run step 1 again. The setup file will tell you what it needs.
+
+The fourth setup file is optional. CleanMol Core works without Chemprop, REINVENT, FairChem, Hugging Face, or any advanced model install.

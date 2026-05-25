@@ -1,0 +1,19 @@
+name: Chemist feedback
+description: Share usability feedback from a chemistry/research perspective.
+title: "[Chemist feedback]: "
+labels: ["chemist-feedback"]
+body:
+  - type: textarea
+    id: workflow
+    attributes:
+      label: What were you trying to do?
+    validations:
+      required: true
+  - type: textarea
+    id: confusing
+    attributes:
+      label: What was confusing?
+  - type: textarea
+    id: useful
+    attributes:
+      label: What was useful?

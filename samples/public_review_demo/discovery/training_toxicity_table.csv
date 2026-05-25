@@ -1,4 +1,1 @@
 smiles,toxicity_endpoint,toxicity_value,toxicity_label,source,provenance
-CCCCCCCCCCCC[N+](C)(C)C,demo_cytotoxicity_guardrail,demo_not_measured_demo_prior,demo_prior_only,synthetic_public_review_demo,synthetic demo row; not measured
-CCCCCCCCCCCC[N+](C)(C)CCCCCCCC,demo_hemolysis_guardrail,demo_not_measured_demo_prior,demo_prior_only,synthetic_public_review_demo,synthetic demo row; not measured
-CCCCCCCCCCCC[n+]1ccccc1,demo_selectivity_guardrail,demo_not_measured_demo_prior,demo_prior_only,synthetic_public_review_demo,synthetic demo row; not measured

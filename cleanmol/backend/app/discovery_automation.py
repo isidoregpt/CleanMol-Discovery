@@ -8,19 +8,23 @@ or heuristic rows are marked as priors, not experimental truth.
 from __future__ import annotations
 
 import csv
+import datetime as dt
+import importlib.metadata
 import json
-import math
+import platform
 import re
 import shutil
 import subprocess
+import sys
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 from .discovery_filters import enrich_modern_discovery_fields, is_generation_seed
 from .dataset_quality import assess_dataset_quality
 from .online_source_catalog import CURATED_SOURCE_CATALOG, get_sources_by_id
+from .integrations.rdkit_baseline import MorganBaseline, build_morgan_baseline, score_candidate_against_baseline
+from .integrations.status import get_integration_status
 
 try:
     import requests
@@ -80,11 +84,19 @@ DEFAULT_STARTER_SEEDS = [
 ]
 
 
-@dataclass
-class BaselinePredictors:
-    activity_examples: List[Tuple[str, float]]
-    toxicity_examples: List[Tuple[str, float]]
-    status: str
+PUBLIC_RELEASE_DISCLAIMER = (
+    "CleanMol Discovery is an early-stage research triage tool.\n\n"
+    "It helps organize chemistry data, generate disinfectant-relevant molecular hypotheses, "
+    "and prioritize candidates for expert review.\n\n"
+    "It does not prove antimicrobial activity, safety, synthesizability, formulation stability, "
+    "environmental acceptability, regulatory compliance, or commercial suitability.\n\n"
+    "Candidate rankings are not probabilities and are not laboratory results.\n\n"
+    "Any candidate considered for real-world follow-up requires independent review by qualified "
+    "chemists, microbiologists, toxicologists, formulation scientists, regulatory experts, and "
+    "laboratory testing.\n"
+)
+
+TRIAGE_SCORE_LIMITATION = "Rank scores are triage scores. They are not probabilities and are not laboratory results."
 
 
 def _emit(progress_callback: ProgressCallback, stage: str, event: str, **payload: Any) -> None:
@@ -727,61 +739,12 @@ def _string_similarity(a: str, b: str) -> float:
     return len(set_a & set_b) / len(set_a | set_b)
 
 
-def _train_baseline_predictors(activity_rows: List[Dict[str, Any]], toxicity_rows: List[Dict[str, Any]]) -> BaselinePredictors:
-    activity_examples: List[Tuple[str, float]] = []
-    for row in activity_rows:
-        smiles = _sanitize_text(row.get("smiles"))
-        label = _sanitize_text(row.get("activity_label")).lower()
-        value = _safe_float(row.get("value"))
-        score: Optional[float] = None
-        if label == "active":
-            score = 85
-        elif label == "inactive":
-            score = 20
-        elif value is not None and value > 0:
-            # Lower MIC-like values are better. This is only a baseline prior.
-            score = max(0, min(100, 100 - 22 * math.log10(value + 1)))
-        if smiles and score is not None:
-            activity_examples.append((smiles, float(score)))
-
-    toxicity_examples: List[Tuple[str, float]] = []
-    for row in toxicity_rows:
-        smiles = _sanitize_text(row.get("smiles"))
-        value = _safe_float(row.get("toxicity_value"))
-        label = _sanitize_text(row.get("toxicity_label")).lower()
-        score = None
-        if label == "risk_flag":
-            score = 75
-        elif value is not None:
-            if "hc50" in _sanitize_text(row.get("toxicity_endpoint")).lower():
-                score = max(0, min(100, 100 - 18 * math.log10(value + 1)))
-            else:
-                score = max(0, min(100, value * 100))
-        if smiles and score is not None:
-            toxicity_examples.append((smiles, float(score)))
-
-    status = "trained" if activity_examples or toxicity_examples else "empty"
-    return BaselinePredictors(activity_examples=activity_examples, toxicity_examples=toxicity_examples, status=status)
+def _train_baseline_predictors(activity_rows: List[Dict[str, Any]], toxicity_rows: List[Dict[str, Any]]) -> MorganBaseline:
+    # Toxicity rows are retained for quality gates; activity/reference rows drive the default Morgan baseline.
+    return build_morgan_baseline(activity_rows)
 
 
-def _predict_from_examples(smiles: str, examples: List[Tuple[str, float]]) -> Tuple[Optional[float], int]:
-    scored = []
-    for ref_smiles, value in examples:
-        sim = _string_similarity(smiles, ref_smiles)
-        if sim > 0:
-            scored.append((sim, value))
-    scored.sort(reverse=True, key=lambda item: item[0])
-    top = scored[:7]
-    if not top:
-        return None, 0
-    total_weight = sum(sim for sim, _ in top)
-    if total_weight <= 0:
-        return None, 0
-    pred = sum(sim * value for sim, value in top) / total_weight
-    return round(pred, 2), len(top)
-
-
-def _estimate_scores(candidate: Dict[str, Any], seeds: List[Dict[str, Any]], baseline: Optional[BaselinePredictors]) -> Dict[str, Any]:
+def _estimate_scores(candidate: Dict[str, Any], seeds: List[Dict[str, Any]], baseline: Optional[MorganBaseline]) -> Dict[str, Any]:
     smiles = _sanitize_text(candidate.get("smiles"))
     enrich_modern_discovery_fields(candidate)
     modern_score = float(candidate.get("modern_disinfectant_score") or 0)
@@ -810,23 +773,22 @@ def _estimate_scores(candidate: Dict[str, Any], seeds: List[Dict[str, Any]], bas
     toxicity_risk = min(100, toxicity_risk)
     selectivity_prior = max(0, 100 - toxicity_risk)
 
-    baseline_activity, activity_neighbors = (None, 0)
-    baseline_toxicity, toxicity_neighbors = (None, 0)
-    if baseline:
-        baseline_activity, activity_neighbors = _predict_from_examples(smiles, baseline.activity_examples)
-        baseline_toxicity, toxicity_neighbors = _predict_from_examples(smiles, baseline.toxicity_examples)
+    morgan_result = score_candidate_against_baseline(smiles, baseline)
+    morgan_score = morgan_result.get("morgan_baseline_score")
+    activity_neighbors = int(morgan_result.get("morgan_neighbor_count") or 0)
 
-    score_provenance = "heuristic_prior_until_chemprop_or_external_model_scores_are_available"
-    if baseline_activity is not None:
-        activity_prior = round(0.55 * activity_prior + 0.45 * baseline_activity, 2)
-        score_provenance = "cleanmol_nearest_neighbor_baseline_plus_discovery_profile"
-    if baseline_toxicity is not None:
-        toxicity_risk = round(0.55 * toxicity_risk + 0.45 * baseline_toxicity, 2)
-        selectivity_prior = max(0, 100 - toxicity_risk)
-        score_provenance = "cleanmol_nearest_neighbor_baseline_plus_discovery_profile"
+    score_sources_available = ["heuristic_discovery_profile"]
+    score_sources_used = ["heuristic_discovery_profile"]
+    score_sources_failed = ["chemprop_v2_not_installed", "external_imported_model_not_configured"]
+    score_provenance = "heuristic_prior_no_reference_neighbors_available"
+    if morgan_score is not None:
+        activity_prior = round(0.55 * activity_prior + 0.45 * float(morgan_score), 2)
+        score_sources_available.append("rdkit_morgan_baseline")
+        score_sources_used.append("rdkit_morgan_baseline")
+        score_provenance = "rdkit_morgan_fingerprint_baseline_plus_discovery_profile"
 
     uncertainty = 0.72
-    if activity_neighbors or toxicity_neighbors:
+    if activity_neighbors:
         uncertainty = 0.6
     if candidate.get("generator_engine") == "reinvent4":
         uncertainty = 0.55
@@ -853,12 +815,17 @@ def _estimate_scores(candidate: Dict[str, Any], seeds: List[Dict[str, Any]], bas
         "uma_readiness_status": status,
         "uma_readiness_notes": notes,
         "activity_baseline_neighbors": activity_neighbors,
-        "toxicity_baseline_neighbors": toxicity_neighbors,
+        "toxicity_baseline_neighbors": 0,
+        **morgan_result,
+        "score_sources_used": score_sources_used,
+        "score_sources_available": score_sources_available,
+        "score_sources_failed": score_sources_failed,
         "score_provenance": score_provenance,
+        "score_limitations": TRIAGE_SCORE_LIMITATION,
     }
 
 
-def _score_and_rank(candidates: List[Dict[str, Any]], seeds: List[Dict[str, Any]], baseline: Optional[BaselinePredictors]) -> List[Dict[str, Any]]:
+def _score_and_rank(candidates: List[Dict[str, Any]], seeds: List[Dict[str, Any]], baseline: Optional[MorganBaseline]) -> List[Dict[str, Any]]:
     ranked: List[Dict[str, Any]] = []
     seen = set()
     for candidate in candidates:
@@ -892,20 +859,46 @@ def _write_review_workbook(
             "predicted_toxicity_risk", "uncertainty", "candidate_tier",
             "generation_recommendation", "uma_readiness_status",
             "generator_engine", "generation_provenance", "score_provenance",
+            "score_sources_used", "score_sources_available", "score_sources_failed",
+            "score_limitations", "chemist_review_status", "chemist_review_notes",
+            "reject_reason", "follow_up_literature_needed", "synthesis_feasibility_review_needed",
+            "toxicity_review_needed", "regulatory_review_needed", "lab_testing_priority",
         ]
         _write_csv(fallback, ranked_rows, headers)
         return
 
     wb = Workbook()
     ws = wb.active
-    ws.title = "Ranked Candidates"
+    ws.title = "READ ME FIRST"
+    ws.append(["CleanMol Discovery Packet"])
+    ws.append(["Disclaimer", PUBLIC_RELEASE_DISCLAIMER.strip()])
+    ws.append(["Score Interpretation", TRIAGE_SCORE_LIMITATION])
+    ws.append(["Quality Status", summary.get("dataset_quality_label", "")])
+    ws.append(["Dataset Status", summary.get("dataset_quality_status", "")])
+    ws.append(["Integrations Used", json.dumps(summary.get("integrations_used", []))])
+    ws.append(["Integrations Unavailable", json.dumps(summary.get("integrations_unavailable", []))])
+    ws.append(["Top Limitations", "Generated hypotheses require qualified expert review and independent laboratory validation."])
+    ws.append(["Recommended Review Workflow", "Review disclaimer, source manifest, dataset quality, nearest references, toxicity flags, UMA readiness, then decide whether expert follow-up is justified."])
+    ws.column_dimensions["A"].width = 28
+    ws.column_dimensions["B"].width = 120
+    for cell in ws["A"]:
+        cell.font = Font(bold=True)
+
+    ws = wb.create_sheet("Ranked Candidates")
     headers = [
         "rank", "candidate_id", "name", "smiles", "rank_score",
         "predicted_activity_score", "predicted_selectivity_score", "predicted_toxicity_risk",
         "uncertainty", "candidate_tier", "generation_recommendation",
         "modern_scaffold_tags", "legacy_flags", "uma_readiness_status",
+        "nearest_reference_name", "nearest_reference_smiles", "nearest_reference_similarity",
+        "nearest_reference_source", "nearest_reference_activity_label", "nearest_reference_endpoint",
+        "nearest_reference_value", "nearest_reference_units", "morgan_baseline_score",
+        "morgan_neighbor_count", "morgan_score_provenance",
         "generator_engine", "generation_provenance", "source_seed_id", "score_provenance",
-        "chemist_review_status", "chemist_notes",
+        "score_sources_used", "score_sources_available", "score_sources_failed", "score_limitations",
+        "chemist_review_status", "chemist_review_notes", "reject_reason", "follow_up_literature_needed",
+        "synthesis_feasibility_review_needed", "toxicity_review_needed", "regulatory_review_needed",
+        "lab_testing_priority",
     ]
     ws.append(headers)
     for row in ranked_rows:
@@ -924,11 +917,32 @@ def _write_review_workbook(
             json.dumps(row.get("modern_scaffold_tags") or []),
             json.dumps(row.get("legacy_flags") or []),
             row.get("uma_readiness_status", ""),
+            row.get("nearest_reference_name", ""),
+            row.get("nearest_reference_smiles", ""),
+            row.get("nearest_reference_similarity", ""),
+            row.get("nearest_reference_source", ""),
+            row.get("nearest_reference_activity_label", ""),
+            row.get("nearest_reference_endpoint", ""),
+            row.get("nearest_reference_value", ""),
+            row.get("nearest_reference_units", ""),
+            row.get("morgan_baseline_score", ""),
+            row.get("morgan_neighbor_count", ""),
+            row.get("morgan_score_provenance", ""),
             row.get("generator_engine", ""),
             row.get("generation_provenance", ""),
             row.get("source_seed_id", ""),
             row.get("score_provenance", ""),
+            json.dumps(row.get("score_sources_used") or []),
+            json.dumps(row.get("score_sources_available") or []),
+            json.dumps(row.get("score_sources_failed") or []),
+            row.get("score_limitations", TRIAGE_SCORE_LIMITATION),
             "pending",
+            "",
+            "",
+            "yes",
+            "yes",
+            "yes",
+            "yes",
             "",
         ])
 
@@ -973,6 +987,56 @@ def _write_review_workbook(
             ])
 
     wb.save(path)
+
+
+def _dependency_versions() -> Dict[str, str]:
+    packages = ["fastapi", "uvicorn", "pydantic", "PyMuPDF", "requests", "openpyxl", "rdkit", "anthropic", "openai", "google-generativeai"]
+    versions: Dict[str, str] = {}
+    for package in packages:
+        try:
+            versions[package] = importlib.metadata.version(package)
+        except importlib.metadata.PackageNotFoundError:
+            versions[package] = "not_installed"
+    return versions
+
+
+def _write_disclaimer(path: Path) -> None:
+    path.write_text(
+        PUBLIC_RELEASE_DISCLAIMER
+        + "\nThis CleanMol Discovery packet contains heuristic research triage outputs.\n\n"
+        + "The ranked candidates are not validated antimicrobial agents.\n"
+        + "The scores are not probabilities.\n"
+        + "The outputs do not establish safety, efficacy, synthesizability, environmental acceptability, regulatory compliance, or commercial suitability.\n\n"
+        + "Use only for qualified expert review and hypothesis generation.\n",
+        encoding="utf-8",
+    )
+
+
+def _write_run_environment(
+    path: Path,
+    *,
+    models: Dict[str, Any],
+    options: Dict[str, Any],
+    integrations: Dict[str, Any],
+    input_files: List[str],
+    output_files: List[str],
+) -> Dict[str, Any]:
+    payload = {
+        "cleanmol_version": "0.1.0-public-preview",
+        "timestamp_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "python_version": sys.version,
+        "platform": platform.platform(),
+        "dependency_versions": _dependency_versions(),
+        "models_requested": models,
+        "models_resolved": models,
+        "options": options,
+        "integrations": integrations,
+        "input_files": input_files,
+        "output_files": output_files,
+        "score_warning": TRIAGE_SCORE_LIMITATION,
+    }
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return payload
 
 
 def run_discovery_automation(
@@ -1029,8 +1093,8 @@ def run_discovery_automation(
         "end",
         activity_rows=len(activity_rows),
         toxicity_rows=len(toxicity_rows),
-        activity_examples=len(baseline.activity_examples),
-        toxicity_examples=len(baseline.toxicity_examples),
+        morgan_references=len(baseline.references),
+        baseline_status=baseline.status,
     )
 
     _emit(progress_callback, "SEEDS", "start", message="Preparing generation seeds")
@@ -1055,6 +1119,12 @@ def run_discovery_automation(
     if len(generated) < target_count and options.get("allow_builtin_generator", True):
         generated.extend(_builtin_generate_candidates(seeds, target_count=target_count - len(generated)))
     manifests.append({"source": "reinvent4", **reinvent_meta})
+    if reinvent_meta.get("status") != "completed":
+        manifests.append({
+            "source": "advanced_generation_fallback",
+            "status": "fallback_used",
+            "warning": "REINVENT 4 was unavailable, disabled, or errored. CleanMol used the built-in rule-based hypothesis generator instead.",
+        })
     _emit(progress_callback, "GENERATE", "end", generated=len(generated), reinvent_status=reinvent_meta.get("status"))
 
     _emit(progress_callback, "SCORE", "start", message="Scoring candidates")
@@ -1066,16 +1136,37 @@ def run_discovery_automation(
         "predicted_activity_score", "predicted_selectivity_score", "predicted_toxicity_risk",
         "novelty_score", "uncertainty", "candidate_tier", "generation_recommendation",
         "modern_scaffold_tags", "legacy_flags", "uma_readiness_status", "uma_readiness_notes",
+        "nearest_reference_name", "nearest_reference_smiles", "nearest_reference_similarity",
+        "nearest_reference_source", "nearest_reference_activity_label", "nearest_reference_endpoint",
+        "nearest_reference_value", "nearest_reference_units", "morgan_baseline_score",
+        "morgan_neighbor_count", "morgan_score_provenance",
         "activity_baseline_neighbors", "toxicity_baseline_neighbors",
-        "generator_engine", "generation_provenance", "source_seed_id", "score_provenance",
+        "generator_engine", "generation_provenance", "source_seed_id", "score_sources_used",
+        "score_sources_available", "score_sources_failed", "score_provenance", "score_limitations",
+        "chemist_review_status", "chemist_review_notes", "reject_reason", "follow_up_literature_needed",
+        "synthesis_feasibility_review_needed", "toxicity_review_needed", "regulatory_review_needed",
+        "lab_testing_priority",
     ]
     serializable_rows = []
     for row in ranked_rows:
         item = dict(row)
         item["modern_scaffold_tags"] = json.dumps(item.get("modern_scaffold_tags") or [])
         item["legacy_flags"] = json.dumps(item.get("legacy_flags") or [])
+        item["score_sources_used"] = json.dumps(item.get("score_sources_used") or [])
+        item["score_sources_available"] = json.dumps(item.get("score_sources_available") or [])
+        item["score_sources_failed"] = json.dumps(item.get("score_sources_failed") or [])
+        item.setdefault("chemist_review_status", "pending")
+        item.setdefault("chemist_review_notes", "")
+        item.setdefault("reject_reason", "")
+        item.setdefault("follow_up_literature_needed", "yes")
+        item.setdefault("synthesis_feasibility_review_needed", "yes")
+        item.setdefault("toxicity_review_needed", "yes")
+        item.setdefault("regulatory_review_needed", "yes")
+        item.setdefault("lab_testing_priority", "")
         serializable_rows.append(item)
     _write_csv(ranked_path, serializable_rows, ranked_headers)
+    ranked_hypothesis_path = discovery_dir / "ranked_hypothesis_candidates.csv"
+    _write_csv(ranked_hypothesis_path, serializable_rows, ranked_headers)
     quality_report = assess_dataset_quality(activity_rows, toxicity_rows, seeds, ranked_rows, manifests)
     _emit(
         progress_callback,
@@ -1087,6 +1178,18 @@ def run_discovery_automation(
     )
 
     _emit(progress_callback, "EXPORT", "start", message="Writing discovery packet")
+    integration_status = get_integration_status(keys, options)
+    integrations_used = sorted({
+        source
+        for row in ranked_rows
+        for source in (row.get("score_sources_used") or [])
+    })
+    integrations_unavailable = [
+        name
+        for name, row in integration_status.items()
+        if row.get("status") in {"not_installed", "installed_but_not_configured", "api_key_missing", "disabled", "error"}
+        and not row.get("required")
+    ]
     summary = {
         "status": "success",
         "elapsed_seconds": round(time.time() - start, 2),
@@ -1098,23 +1201,52 @@ def run_discovery_automation(
         "generator_engine": generator_engine,
         "reinvent_status": reinvent_meta.get("status"),
         "predictor_status": baseline.status,
-        "activity_baseline_examples": len(baseline.activity_examples),
-        "toxicity_baseline_examples": len(baseline.toxicity_examples),
+        "morgan_reference_count": len(baseline.references),
         "dataset_quality_status": quality_report.get("status"),
         "dataset_quality_label": quality_report.get("status_label"),
         "dataset_quality_score": quality_report.get("quality_score"),
         "dataset_quality_gates": f"{quality_report.get('gates_passed')}/{quality_report.get('gates_total')}",
+        "integrations_used": integrations_used,
+        "integrations_unavailable": integrations_unavailable,
+        "score_warning": TRIAGE_SCORE_LIMITATION,
         "safety_note": "Generated candidates are hypotheses for qualified chemist review; no synthesis instructions or efficacy claims are provided.",
     }
+    disclaimer_path = discovery_dir / "DISCLAIMER.txt"
+    workbook_path = discovery_dir / ("ranked_lab_candidates_review.xlsx" if Workbook is not None else "ranked_lab_candidates_review.csv")
+    hypothesis_workbook_path = discovery_dir / ("ranked_hypothesis_candidates_review.xlsx" if Workbook is not None else "ranked_hypothesis_candidates_review.csv")
+    _write_disclaimer(disclaimer_path)
     manifest_path = discovery_dir / "discovery_source_manifest.json"
     manifest_path.write_text(json.dumps(manifests, indent=2), encoding="utf-8")
     quality_path = discovery_dir / "dataset_quality_report.json"
     quality_path.write_text(json.dumps(quality_report, indent=2), encoding="utf-8")
     summary_path = discovery_dir / "discovery_run_summary.json"
     summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
-    workbook_path = discovery_dir / ("ranked_lab_candidates_review.xlsx" if Workbook is not None else "ranked_lab_candidates_review.csv")
+    run_environment_path = discovery_dir / "run_environment.json"
+    output_files = [
+        str(activity_path),
+        str(toxicity_path),
+        str(seed_path),
+        str(ranked_path),
+        str(ranked_hypothesis_path),
+        str(manifest_path),
+        str(quality_path),
+        str(summary_path),
+        str(disclaimer_path),
+        str(run_environment_path),
+        str(workbook_path),
+        str(hypothesis_workbook_path),
+    ]
+    _write_run_environment(
+        run_environment_path,
+        models={},
+        options=options,
+        integrations=integration_status,
+        input_files=[str(upload_path)] if upload_path else [],
+        output_files=output_files,
+    )
     _write_review_workbook(workbook_path, ranked_rows, manifests, summary, quality_report=quality_report)
-    _emit(progress_callback, "EXPORT", "end", files=5)
+    _write_review_workbook(hypothesis_workbook_path, ranked_rows, manifests, summary, quality_report=quality_report)
+    _emit(progress_callback, "EXPORT", "end", files=10)
 
     return {
         "ok": True,
@@ -1124,10 +1256,14 @@ def run_discovery_automation(
             "training_toxicity_table": str(toxicity_path),
             "resolved_generation_seeds": str(seed_path),
             "ranked_lab_candidates": str(ranked_path),
+            "ranked_hypothesis_candidates": str(ranked_hypothesis_path),
             "review_workbook": str(workbook_path),
+            "ranked_hypothesis_candidates_review": str(hypothesis_workbook_path),
             "source_manifest": str(manifest_path),
             "dataset_quality_report": str(quality_path),
             "run_summary": str(summary_path),
+            "run_environment": str(run_environment_path),
+            "disclaimer": str(disclaimer_path),
         },
         "dataset_quality": quality_report,
         "top_candidates": ranked_rows[:10],

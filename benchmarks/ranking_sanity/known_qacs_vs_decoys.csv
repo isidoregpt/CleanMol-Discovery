@@ -1,0 +1,8 @@
+name,smiles,label
+c12_qac,CCCCCCCCCCCC[N+](C)(C)C,known_qac
+benzyl_c12_qac,CCCCCCCCCCCC[N+](C)(C)Cc1ccccc1,known_qac
+gemini_qac,CCCCCCCCCC[N+](C)(C)CCC[N+](C)(C)CCCCCCCCCC,known_qac
+simple_amine,CCCCN,decoy
+benzene,c1ccccc1,decoy
+dodecane,CCCCCCCCCCCC,decoy
+invalid,not_a_smiles,invalid

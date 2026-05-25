@@ -16,8 +16,19 @@ const LS = {
   hf: "cleanmol:key:hf",
   models: "cleanmol:models",
   autoLatestModels: "cleanmol:models:autoLatest",
-  paths: "cleanmol:paths"
+  paths: "cleanmol:paths",
+  releaseAck: "cleanmol:release-warning:0.1.0-public-preview",
+  disabledIntegrations: "cleanmol:disabled-integrations",
+  reducedEgress: "cleanmol:reduced-egress"
 };
+
+const RELEASE_WARNING_TEXT = [
+  "CleanMol Discovery is an early-stage research triage tool.",
+  "It helps organize chemistry data, generate disinfectant-relevant molecular hypotheses, and prioritize candidates for expert review.",
+  "It does not prove antimicrobial activity, safety, synthesizability, formulation stability, environmental acceptability, regulatory compliance, or commercial suitability.",
+  "Candidate rankings are not probabilities and are not laboratory results.",
+  "Any candidate considered for real-world follow-up requires independent review by qualified chemists, microbiologists, toxicologists, formulation scientists, regulatory experts, and laboratory testing."
+];
 
 const FALLBACK_MODEL_DEFAULTS: ModelBundle = {
   primary: "claude-opus-4-7",
@@ -113,6 +124,35 @@ type OnlineSource = {
 };
 type ModelKey = "primary" | "auditor" | "gapHunter";
 type InfoPanel = "instructions" | "about" | "license";
+type IntegrationRow = {
+  status: string;
+  required?: boolean;
+  enabled?: boolean;
+  message?: string;
+  version?: string;
+};
+
+const INTEGRATION_LABELS: Record<string, string> = {
+  cleanmol_core: "CleanMol Core",
+  rdkit: "RDKit",
+  morgan_baseline: "Morgan Fingerprint Baseline",
+  chemprop_v2: "Chemprop v2",
+  reinvent4: "REINVENT 4",
+  fairchem_uma: "FairChem / UMA",
+  anthropic_api: "Anthropic API",
+  openai_api: "OpenAI API",
+  google_gemini_api: "Google Gemini API",
+  huggingface_api: "Hugging Face API",
+};
+
+const OPTIONAL_INTEGRATIONS = new Set(["chemprop_v2", "reinvent4", "fairchem_uma"]);
+
+function statusLabel(status: string) {
+  return status
+    .split("_")
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
 
 // Creep function: starts fast, slows down, never reaches cap
 function creepProgress(elapsedMs: number, cap = 0.92, speed = 0.0003): number {
@@ -184,6 +224,14 @@ export default function Page() {
   const [completed, setCompleted] = useState(false);
   const [logFile, setLogFile] = useState("");
   const [infoPanel, setInfoPanel] = useState<InfoPanel>("instructions");
+  const [releaseAcknowledged, setReleaseAcknowledged] = useState(false);
+  const [showReleaseWarning, setShowReleaseWarning] = useState(false);
+  const [integrationStatus, setIntegrationStatus] = useState<Record<string, IntegrationRow>>({});
+  const [integrationLoading, setIntegrationLoading] = useState(false);
+  const [disabledIntegrations, setDisabledIntegrations] = useState<string[]>([]);
+  const [integrationNote, setIntegrationNote] = useState("");
+  const [demoRunning, setDemoRunning] = useState(false);
+  const [reducedEgressMode, setReducedEgressMode] = useState(false);
 
   const applyDefaultPayload = useCallback((data: DefaultsResponse, force = false) => {
     const previousDefaults = modelDefaultsRef.current;
@@ -217,6 +265,10 @@ export default function Page() {
   }, []);
 
   const refreshLatestModelDefaults = useCallback(async (force = false, quiet = false) => {
+    if (reducedEgressMode) {
+      if (!quiet) setModelRefreshStatus("Reduced-egress mode is on; provider model checks are disabled.");
+      return;
+    }
     const hasProviderKey = [openai, anthropic, gemini].some(key => key.trim().length >= 12);
     if (!hasProviderKey) {
       if (!quiet) setModelRefreshStatus("Add provider API keys to refresh latest model defaults.");
@@ -240,7 +292,7 @@ export default function Page() {
     } finally {
       setModelRefreshRunning(false);
     }
-  }, [anthropic, applyDefaultPayload, gemini, openai]);
+  }, [anthropic, applyDefaultPayload, gemini, openai, reducedEgressMode]);
 
   // Load saved settings
   useEffect(() => {
@@ -251,6 +303,10 @@ export default function Page() {
     setGemini(localStorage.getItem(LS.gemini) || "");
     setHfToken(localStorage.getItem(LS.hf) || "");
     setAutoLatestModels(localStorage.getItem(LS.autoLatestModels) !== "false");
+    const acknowledged = localStorage.getItem(LS.releaseAck) === "true";
+    setReleaseAcknowledged(acknowledged);
+    setShowReleaseWarning(!acknowledged);
+    setReducedEgressMode(localStorage.getItem(LS.reducedEgress) === "true");
 
     const m = localStorage.getItem(LS.models);
     if (m) {
@@ -268,6 +324,14 @@ export default function Page() {
         const j = JSON.parse(p);
         setInputDir(j.inputDir || "");
         setOutputDir(j.outputDir || "");
+      } catch {}
+    }
+
+    const disabled = localStorage.getItem(LS.disabledIntegrations);
+    if (disabled) {
+      try {
+        const parsed = JSON.parse(disabled);
+        if (Array.isArray(parsed)) setDisabledIntegrations(parsed);
       } catch {}
     }
   }, []);
@@ -290,12 +354,12 @@ export default function Page() {
   }, [applyDefaultPayload]);
 
   useEffect(() => {
-    if (!autoLatestModels || ![openai, anthropic, gemini].some(key => key.trim().length >= 12)) return;
+    if (reducedEgressMode || !autoLatestModels || ![openai, anthropic, gemini].some(key => key.trim().length >= 12)) return;
     const timeout = window.setTimeout(() => {
       refreshLatestModelDefaults(true, true);
     }, 1000);
     return () => window.clearTimeout(timeout);
-  }, [anthropic, autoLatestModels, gemini, openai, refreshLatestModelDefaults]);
+  }, [anthropic, autoLatestModels, gemini, openai, reducedEgressMode, refreshLatestModelDefaults]);
 
   // Save settings
   useEffect(() => {
@@ -324,6 +388,19 @@ export default function Page() {
     if (typeof window === "undefined") return;
     localStorage.setItem(LS.paths, JSON.stringify({ inputDir, outputDir }));
   }, [inputDir, outputDir]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(LS.disabledIntegrations, JSON.stringify(disabledIntegrations));
+  }, [disabledIntegrations]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem(LS.reducedEgress, reducedEgressMode ? "true" : "false");
+    if (reducedEgressMode) {
+      setIncludePublicSources(false);
+    }
+  }, [reducedEgressMode]);
 
   // Creep animation for progress bar during LLM calls
   useEffect(() => {
@@ -391,6 +468,10 @@ export default function Page() {
 
   const searchOnlineSources = useCallback(async () => {
     if (!sourceQuery.trim()) return;
+    if (reducedEgressMode) {
+      addDiscoveryLog("Reduced-egress mode is on; online source search is disabled.", "error", "SOURCES");
+      return;
+    }
     setSourceLoading(true);
     try {
       const response = await fetch("http://localhost:8787/api/discovery/source-search", {
@@ -412,7 +493,50 @@ export default function Page() {
     } finally {
       setSourceLoading(false);
     }
-  }, [addDiscoveryLog, hfToken, sourceQuery]);
+  }, [addDiscoveryLog, hfToken, reducedEgressMode, sourceQuery]);
+
+  const loadIntegrationStatus = useCallback(async () => {
+    setIntegrationLoading(true);
+    try {
+      const response = await fetch("http://localhost:8787/api/integrations/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          keys: { openai, anthropic, gemini, hf: hfToken },
+          options: { disabled_integrations: disabledIntegrations, reduced_egress: reducedEgressMode },
+        }),
+      });
+      if (!response.ok) throw new Error(`Integration status error: ${response.status}`);
+      const data = await response.json();
+      setIntegrationStatus(data || {});
+      setIntegrationNote("Integration status refreshed.");
+    } catch (e: unknown) {
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      setIntegrationNote(`Integration status unavailable: ${errorMessage}`);
+    } finally {
+      setIntegrationLoading(false);
+    }
+  }, [anthropic, disabledIntegrations, gemini, hfToken, openai, reducedEgressMode]);
+
+  const toggleIntegration = (integrationId: string, disabled: boolean) => {
+    setDisabledIntegrations(prev => {
+      const set = new Set(prev);
+      if (disabled) set.add(integrationId);
+      else set.delete(integrationId);
+      return Array.from(set);
+    });
+  };
+
+  const clearSavedKeys = () => {
+    setOpenai("");
+    setAnthropic("");
+    setGemini("");
+    setHfToken("");
+    if (typeof window !== "undefined") {
+      [LS.openai, LS.anthropic, LS.gemini, LS.hf].forEach(key => localStorage.removeItem(key));
+    }
+    setIntegrationNote("Saved API keys cleared from this browser.");
+  };
 
   const toggleSource = (sourceId: string) => {
     setSelectedSourceIds(prev =>
@@ -423,6 +547,10 @@ export default function Page() {
   useEffect(() => {
     loadSourceCatalog();
   }, [loadSourceCatalog]);
+
+  useEffect(() => {
+    loadIntegrationStatus();
+  }, [loadIntegrationStatus]);
 
   // Update stage status
   const updateStage = useCallback((stageId: string, status: StageStatus, detail?: string) => {
@@ -447,6 +575,10 @@ export default function Page() {
 
   // Run pipeline with streaming SSE updates
   const runPipeline = async () => {
+    if (reducedEgressMode) {
+      addLog("Reduced-egress mode is on; LLM extraction is disabled. Turn it off to run the PDF pipeline.", "error", "SECURITY");
+      return;
+    }
     setRunning(true);
     setCompleted(false);
     setProgress(0);
@@ -611,6 +743,11 @@ export default function Page() {
   };
 
   const runDiscovery = async () => {
+    if (!releaseAcknowledged) {
+      setShowReleaseWarning(true);
+      addDiscoveryLog("Acknowledge the research triage warning before running Discovery Automation.", "error", "WARNING");
+      return;
+    }
     setDiscoveryRunning(true);
     setDiscoveryCompleted(false);
     setDiscoveryResult(null);
@@ -630,14 +767,16 @@ export default function Page() {
         body: JSON.stringify({
           output_dir: outputDir,
           uploaded_dataset_path: discoveryMode === "upload" ? uploadedDatasetPath : undefined,
-          keys: { hf: hfToken },
+          keys: { hf: reducedEgressMode ? "" : hfToken },
           options: {
             mode: discoveryMode,
-            include_public_sources: includePublicSources,
+            include_public_sources: reducedEgressMode ? false : includePublicSources,
             selected_source_ids: selectedSourceIds,
             allow_builtin_generator: allowBuiltinGenerator,
             target_candidate_count: targetCandidateCount,
             generator_engine: "auto",
+            reduced_egress: reducedEgressMode,
+            disabled_integrations: disabledIntegrations,
           },
         }),
       });
@@ -695,9 +834,44 @@ export default function Page() {
     }
   };
 
+  const acknowledgeReleaseWarning = () => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem(LS.releaseAck, "true");
+    }
+    setReleaseAcknowledged(true);
+    setShowReleaseWarning(false);
+  };
+
+  const runSyntheticDemo = async () => {
+    if (!outputDir) {
+      addDiscoveryLog("Set an output folder before running the synthetic demo.", "error", "DEMO");
+      return;
+    }
+    setDemoRunning(true);
+    setDiscoveryLines([]);
+    addDiscoveryLog("Running no-key synthetic demo packet", "system", "DEMO");
+    try {
+      const response = await fetch("http://localhost:8787/api/demo/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ output_dir: outputDir }),
+      });
+      if (!response.ok) throw new Error(`Demo error: ${response.status}`);
+      const data = await response.json();
+      setDiscoveryResult(data);
+      setDiscoveryCompleted(true);
+      addDiscoveryLog(`Synthetic demo packet: ${data.files?.demo_packet || ""}`, "success", "DEMO");
+    } catch (e: unknown) {
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      addDiscoveryLog(`ERROR: ${errorMessage}`, "error", "DEMO");
+    } finally {
+      setDemoRunning(false);
+    }
+  };
+
   const canRun = useMemo(() => {
-    return !!inputDir && !!outputDir && !!anthropic && !!primaryModel;
-  }, [inputDir, outputDir, anthropic, primaryModel]);
+    return !!inputDir && !!outputDir && !!anthropic && !!primaryModel && !reducedEgressMode;
+  }, [inputDir, outputDir, anthropic, primaryModel, reducedEgressMode]);
 
   const pipelineIssues = useMemo(() => {
     const issues: string[] = [];
@@ -705,17 +879,19 @@ export default function Page() {
     if (!inputDir) issues.push("input folder with PDFs");
     if (!outputDir) issues.push("output folder");
     if (!primaryModel) issues.push("primary model");
+    if (reducedEgressMode) issues.push("reduced-egress mode is off for LLM extraction");
     return issues;
-  }, [anthropic, inputDir, outputDir, primaryModel]);
+  }, [anthropic, inputDir, outputDir, primaryModel, reducedEgressMode]);
 
   const discoveryIssues = useMemo(() => {
     const issues: string[] = [];
     if (!outputDir) issues.push("output folder");
+    if (!releaseAcknowledged) issues.push("research triage warning acknowledgement");
     if (discoveryMode === "upload" && !uploadedDatasetPath) {
       issues.push("uploaded CSV or Excel dataset");
     }
     return issues;
-  }, [discoveryMode, outputDir, uploadedDatasetPath]);
+  }, [discoveryMode, outputDir, releaseAcknowledged, uploadedDatasetPath]);
 
   const canRunDiscovery = useMemo(() => {
     return discoveryIssues.length === 0 && !discoveryRunning && !running;
@@ -732,6 +908,36 @@ export default function Page() {
       {/* Background effects */}
       <div className="grid-background" />
       <div className="gradient-overlay" />
+
+      {showReleaseWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-2xl rounded-xl border border-cyan-300/25 bg-slate-950 p-6 shadow-2xl shadow-cyan-950/40">
+            <div className="text-xs uppercase tracking-[0.3em] text-cyan-300/70 mb-3">Public Research Preview</div>
+            <h2 className="text-2xl font-semibold text-white mb-4">Research triage only</h2>
+            <div className="space-y-3 text-sm leading-6 text-white/75">
+              {RELEASE_WARNING_TEXT.map(line => (
+                <p key={line}>{line}</p>
+              ))}
+            </div>
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setShowReleaseWarning(false)}
+                className="px-4 py-2 rounded-lg border border-white/10 bg-white/5 text-sm text-white/70 hover:bg-white/10 transition"
+              >
+                Review later
+              </button>
+              <button
+                type="button"
+                onClick={acknowledgeReleaseWarning}
+                className="btn-primary"
+              >
+                I understand - use for research triage only.
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main content */}
       <main className="relative z-10 max-w-7xl mx-auto p-6 space-y-6">
@@ -779,6 +985,13 @@ export default function Page() {
               </p>
             </div>
             <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowReleaseWarning(true)}
+                className="px-3 py-2 rounded-lg border border-amber-300/25 bg-amber-400/10 text-sm text-amber-100 hover:bg-amber-400/15 transition"
+              >
+                Warning
+              </button>
               {(["instructions", "about", "license"] as InfoPanel[]).map(panel => (
                 <button
                   key={panel}
@@ -871,10 +1084,22 @@ export default function Page() {
 
             {/* API Keys */}
             <section className="glass-card glass-card-glow p-6">
-              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <span>API Keys</span>
-                <span className="text-xs text-white/40 font-normal ml-2">Stored locally in browser</span>
-              </h2>
+              <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <span>API Keys</span>
+                  <span className="text-xs text-white/40 font-normal ml-2">Stored locally in browser</span>
+                </h2>
+                <button
+                  type="button"
+                  onClick={clearSavedKeys}
+                  className="text-xs px-3 py-2 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 transition"
+                >
+                  Clear saved keys
+                </button>
+              </div>
+              <p className="text-xs text-white/45 mb-4">
+                Browser storage is convenient for a personal workstation. Clear saved keys on shared lab machines.
+              </p>
               <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-xs text-white/50 uppercase tracking-wider mb-2">
@@ -925,6 +1150,20 @@ export default function Page() {
                   />
                 </div>
               </div>
+              <label className="mt-4 flex items-start gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-sm text-white/80">
+                <input
+                  type="checkbox"
+                  checked={reducedEgressMode}
+                  onChange={(e) => setReducedEgressMode(e.target.checked)}
+                  className="mt-1"
+                />
+                <span>
+                  <span className="font-medium text-white/90">Reduced-egress / local-only mode</span>
+                  <span className="block text-xs text-white/50 mt-1">
+                    Disables provider LLM calls, Hugging Face/API pulling, and online source search. Use this for local uploaded data review or institutional security checks.
+                  </span>
+                </span>
+              </label>
             </section>
 
             {/* Folders */}
@@ -967,14 +1206,24 @@ export default function Page() {
             <section className="glass-card glass-card-glow p-6">
               <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
                 <h2 className="text-lg font-semibold">Discovery Automation</h2>
-                <button
-                  type="button"
-                  onClick={runDiscovery}
-                  disabled={!canRunDiscovery}
-                  className="btn-primary flex items-center gap-3"
-                >
-                  <span>{discoveryRunning ? "Running..." : "Run Discovery"}</span>
-                </button>
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={runSyntheticDemo}
+                    disabled={!outputDir || demoRunning}
+                    className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 transition text-sm disabled:opacity-50"
+                  >
+                    {demoRunning ? "Demo running..." : "Run Synthetic Demo"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={runDiscovery}
+                    disabled={!canRunDiscovery}
+                    className="btn-primary flex items-center gap-3"
+                  >
+                    <span>{discoveryRunning ? "Running..." : "Run Discovery"}</span>
+                  </button>
+                </div>
               </div>
               <p className="text-sm text-white/55 mb-4">
                 Auto-create can start with only an output folder. Chemist upload uses your CSV or Excel file and then applies the same quality gates.
@@ -1055,7 +1304,8 @@ export default function Page() {
                 <label className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/80">
                   <input
                     type="checkbox"
-                    checked={includePublicSources}
+                    checked={includePublicSources && !reducedEgressMode}
+                    disabled={reducedEgressMode}
                     onChange={(e) => setIncludePublicSources(e.target.checked)}
                   />
                   <span>Use public HF/API sources</span>
@@ -1069,8 +1319,13 @@ export default function Page() {
                   <span>Allow built-in generator fallback</span>
                 </label>
               </div>
+              {reducedEgressMode && (
+                <div className="mb-4 rounded-lg border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-xs text-amber-100/85">
+                  Reduced-egress mode is on. Discovery will use local/uploaded data and built-in generation only; online pulling and provider calls are disabled.
+                </div>
+              )}
 
-              {includePublicSources && (
+              {includePublicSources && !reducedEgressMode && (
                 <div className="space-y-4 mb-4">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <h3 className="text-sm font-semibold text-white/80">Source Library</h3>
@@ -1295,6 +1550,91 @@ export default function Page() {
               </div>
             </section>
 
+            {/* Integrations */}
+            <section className="glass-card p-6">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <h2 className="text-lg font-semibold">Integrations</h2>
+                <button
+                  type="button"
+                  onClick={loadIntegrationStatus}
+                  disabled={integrationLoading}
+                  className="text-xs px-3 py-2 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 transition disabled:opacity-50"
+                >
+                  {integrationLoading ? "Checking..." : "Check again"}
+                </button>
+              </div>
+              <p className="text-xs text-white/45 mb-4">
+                CleanMol Core works without Chemprop, REINVENT, FairChem, Hugging Face, or provider keys. Optional tools add signals only when installed and enabled.
+              </p>
+              <div className="space-y-3">
+                {Object.entries(INTEGRATION_LABELS).map(([id, label]) => {
+                  const row = integrationStatus[id];
+                  const status = row?.status || "checking";
+                  const isOptional = OPTIONAL_INTEGRATIONS.has(id);
+                  const isDisabled = disabledIntegrations.includes(id);
+                  const ready = status === "ready";
+                  return (
+                    <div key={id} className="rounded-lg border border-white/10 bg-white/5 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-medium text-white/90">{label}</div>
+                          <div className={`text-xs mt-1 ${ready ? "text-emerald-300/85" : status === "error" ? "text-rose-300/85" : "text-amber-200/85"}`}>
+                            {statusLabel(status)}
+                            {row?.version ? ` - ${row.version}` : ""}
+                          </div>
+                        </div>
+                        {isOptional && (
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => toggleIntegration(id, false)}
+                              disabled={!isDisabled}
+                              className="text-[11px] px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10 disabled:opacity-40"
+                            >
+                              Enable
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => toggleIntegration(id, true)}
+                              disabled={isDisabled}
+                              className="text-[11px] px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10 disabled:opacity-40"
+                            >
+                              Disable
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-xs text-white/50 mt-2">{row?.message || "Checking local status..."}</p>
+                      {isOptional && (
+                        <div className="flex gap-2 mt-3 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => setIntegrationNote(`${label} setup is optional. Use the Advanced Discovery Pack scripts or the setup guide; CleanMol Core remains available either way.`)}
+                            className="text-[11px] px-2 py-1 rounded border border-cyan-300/20 bg-cyan-400/10 hover:bg-cyan-400/15 text-cyan-100"
+                          >
+                            Install / Setup
+                          </button>
+                          <a
+                            href="https://github.com/isidoregpt/CleanMol-Discovery/blob/main/FOR_COMPUTATIONAL_CHEMISTS.md"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[11px] px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10 text-white/75"
+                          >
+                            Open setup guide
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {integrationNote && (
+                <div className="mt-4 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/55">
+                  {integrationNote}
+                </div>
+              )}
+            </section>
+
             {/* Stage Tracker */}
             <section className="glass-card p-6">
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -1350,7 +1690,7 @@ export default function Page() {
         {/* Footer */}
         <footer className="text-center text-xs text-white/30 py-8">
           <div className="flex items-center justify-center gap-2">
-            <span>CleanMol Discovery v1.0</span>
+            <span>CleanMol Discovery v0.1.0 public preview</span>
             <span>|</span>
             <span>Multi-Model Chemistry Dataset Builder</span>
             <span>|</span>

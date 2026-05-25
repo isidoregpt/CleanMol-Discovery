@@ -1,0 +1,104 @@
+{
+  "cleanmol_version": "0.1.0-public-preview",
+  "timestamp_utc": "2026-05-25T13:52:40.151534+00:00",
+  "python_version": "3.13.6 (tags/v3.13.6:4e66535, Aug  6 2025, 14:36:00) [MSC v.1944 64 bit (AMD64)]",
+  "platform": "Windows-10-10.0.19045-SP0",
+  "dependency_versions": {
+    "fastapi": "0.115.6",
+    "uvicorn": "0.34.0",
+    "pydantic": "2.10.4",
+    "PyMuPDF": "not_installed",
+    "requests": "not_installed",
+    "openpyxl": "not_installed",
+    "rdkit": "not_installed",
+    "anthropic": "0.42.0",
+    "openai": "1.82.1",
+    "google-generativeai": "not_installed"
+  },
+  "models_requested": {},
+  "models_resolved": {},
+  "options": {
+    "include_public_sources": false,
+    "allow_builtin_generator": true,
+    "target_candidate_count": 12,
+    "reduced_egress": true
+  },
+  "integrations": {
+    "cleanmol_core": {
+      "status": "ready",
+      "required": true,
+      "enabled": true,
+      "message": "CleanMol Core is available."
+    },
+    "rdkit": {
+      "status": "error",
+      "required": true,
+      "enabled": false,
+      "message": "RDKit is required for CleanMol Core but was not detected."
+    },
+    "morgan_baseline": {
+      "status": "error",
+      "required": true,
+      "enabled": false,
+      "message": "Morgan fingerprint baseline requires RDKit."
+    },
+    "chemprop_v2": {
+      "status": "not_installed",
+      "required": false,
+      "enabled": false,
+      "message": "Chemprop v2 is optional and not installed. CleanMol will use RDKit Morgan baseline and heuristic scoring."
+    },
+    "reinvent4": {
+      "status": "not_installed",
+      "required": false,
+      "enabled": false,
+      "message": "REINVENT 4 is optional and not installed. CleanMol will use the built-in rule-based hypothesis generator."
+    },
+    "fairchem_uma": {
+      "status": "not_installed",
+      "required": false,
+      "enabled": false,
+      "message": "FairChem/UMA is optional and not installed. CleanMol prepares handoff files but does not run UMA by default."
+    },
+    "anthropic_api": {
+      "status": "disabled",
+      "required": false,
+      "enabled": false,
+      "message": "Anthropic API calls are disabled by reduced-egress / local-only mode."
+    },
+    "openai_api": {
+      "status": "disabled",
+      "required": false,
+      "enabled": false,
+      "message": "OpenAI API calls are disabled by reduced-egress / local-only mode."
+    },
+    "google_gemini_api": {
+      "status": "disabled",
+      "required": false,
+      "enabled": false,
+      "message": "Google Gemini API calls are disabled by reduced-egress / local-only mode."
+    },
+    "huggingface_api": {
+      "status": "disabled",
+      "required": false,
+      "enabled": false,
+      "message": "Hugging Face API calls are disabled by reduced-egress / local-only mode."
+    }
+  },
+  "input_files": [],
+  "output_files": [
+    "samples\\public_review_demo\\discovery\\training_activity_table.csv",
+    "samples\\public_review_demo\\discovery\\training_toxicity_table.csv",
+    "samples\\public_review_demo\\discovery\\resolved_generation_seeds.smi",
+    "samples\\public_review_demo\\discovery\\ranked_lab_candidates.csv",
+    "samples\\public_review_demo\\discovery\\ranked_hypothesis_candidates.csv",
+    "samples\\public_review_demo\\discovery\\discovery_source_manifest.json",
+    "samples\\public_review_demo\\discovery\\dataset_quality_report.json",
+    "samples\\public_review_demo\\discovery\\discovery_run_summary.json",
+    "samples\\public_review_demo\\discovery\\DISCLAIMER.txt",
+    "samples\\public_review_demo\\discovery\\run_environment.json",
+    "samples\\public_review_demo\\discovery\\ranked_lab_candidates_review.csv",
+    "samples\\public_review_demo\\discovery\\ranked_hypothesis_candidates_review.csv"
+  ],
+  "score_warning": "Rank scores are triage scores. They are not probabilities and are not laboratory results."
+}

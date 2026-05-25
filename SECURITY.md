@@ -180,6 +180,7 @@ Storage behavior:
 - The backend uses keys to make HTTPS requests to selected third-party APIs.
 - CleanMol is designed to mask API keys in generated run logs.
 - The `3-end` scripts stop local servers but do not clear browser `localStorage`.
+- The app includes a `Clear saved keys` button for clearing API keys from browser storage.
 
 Risks:
 
@@ -258,6 +259,7 @@ CleanMol can be opened without API keys, but core LLM extraction requires provid
 Reduced-egress options:
 
 - review the included demo packet at `samples/public_review_demo/`
+- turn on `Reduced-egress / local-only mode` in the app
 - use uploaded/local datasets without running online LLM extraction
 - disable public source pulls in Discovery Automation
 - do not enter LLM provider keys
@@ -569,9 +571,7 @@ Recommended improvements before institutional production use:
 - restrict CORS to a single exact origin
 - add TLS for hosted deployment
 - move secrets out of browser localStorage
-- add a "Clear API Keys" button
 - add provider allow/deny policy switches
-- add local-only/offline mode controls
 - add an SBOM
 - add dependency vulnerability scanning to CI
 - add file size limits and file scanning

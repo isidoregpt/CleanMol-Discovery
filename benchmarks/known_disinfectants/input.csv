@@ -1,0 +1,12 @@
+name,smiles,expected_group
+benzalkonium_chloride_like,CCCCCCCCCCCC[N+](C)(C)Cc1ccccc1.[Cl-],qac
+cetylpyridinium_chloride_like,CCCCCCCCCCCCCCCC[n+]1ccccc1.[Cl-],pyridinium
+chlorhexidine_like,N=C(N)NCCCCCCNC(=N)N,bis_cationic_control
+phosphonium_c12,CCCCCCCCCCCC[P+](C)(C)C,phosphonium
+pyridinium_c12,CCCCCCCCCCCC[n+]1ccccc1,pyridinium
+gemini_bis_qac,CCCCCCCCCC[N+](C)(C)CCC[N+](C)(C)CCCCCCCCCC,gemini_qac
+simple_monoamine,CCCCN,lower_priority_control
+neutral_hydrocarbon,CCCCCCCCCCCC,negative_control
+invalid_smiles,not_a_smiles,invalid
+salt_counterion,CCCCCCCCCCCC[N+](C)(C)C.[Br-],salt_counterion
+long_chain_cationic_toxicity_risk,CCCCCCCCCCCCCCCCCC[N+](C)(C)C,toxicity_risk_review

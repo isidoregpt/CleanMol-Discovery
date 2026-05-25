@@ -1,10 +1,18 @@
 # CleanMol Discovery
 
-CleanMol Discovery is a desktop research application for building chemistry datasets and ranked lab-candidate packets for next-generation disinfectant discovery. It supports Windows and Apple Silicon / M-Series Macs.
+CleanMol Discovery is an early-stage research tool for building structured chemistry datasets and producing ranked disinfectant-relevant hypothesis packets for qualified chemist review. It supports Windows and Apple Silicon / M-Series Macs.
 
 The project is designed for the "Lysol 2.0" problem: helping researchers move from scattered papers, patents, public datasets, and incomplete local data toward modern, reviewable candidate molecules that can be evaluated by a chemist and then tested in the lab.
 
-CleanMol is not a replacement for synthesis planning, toxicology, regulatory review, or laboratory validation. It is a dataset-building and candidate-prioritization system meant to make early discovery more accessible, auditable, and modern.
+CleanMol Discovery is an early-stage research triage tool.
+
+It helps organize chemistry data, generate disinfectant-relevant molecular hypotheses, and prioritize candidates for expert review.
+
+It does not prove antimicrobial activity, safety, synthesizability, formulation stability, environmental acceptability, regulatory compliance, or commercial suitability.
+
+Candidate rankings are not probabilities and are not laboratory results.
+
+Any candidate considered for real-world follow-up requires independent review by qualified chemists, microbiologists, toxicologists, formulation scientists, regulatory experts, and laboratory testing.
 
 ## Public Review Preview
 
@@ -16,6 +24,41 @@ CleanMol Discovery is ready for public review as an early research preview. Revi
 - `samples/public_review_demo/`: small synthetic demo output packet
 
 The demo packet is intentionally synthetic and labeled `Not Ready`. It exists to show output shape, file meaning, quality gates, and FAIR Chemistry / UMA readiness notes without requiring API keys, private papers, or a long model run.
+
+## Implementation Status
+
+| Capability | Current status | Default install? | Notes |
+| --- | --- | --- | --- |
+| PDF text extraction | Implemented | Yes | Born-digital PDFs preferred |
+| LLM extraction | Implemented | Yes | Requires provider API key |
+| Figure analysis | Experimental | Yes | Needs validation against benchmark set |
+| SMILES validation | Implemented | Yes | RDKit-based |
+| RDKit Morgan baseline | Implemented | Yes | Default similarity baseline |
+| Candidate ranking | Implemented | Yes | Triage score, not probability |
+| Built-in candidate generator | Implemented | Yes | Rule-based hypothesis generator |
+| Chemprop v2 | Optional advanced | No | Install through Advanced Discovery Pack |
+| REINVENT 4 | Optional advanced/manual | No | Requires external config |
+| FairChem/UMA | Handoff only | No | Optional expert review path |
+| Lab validation | Not included | No | External requirement |
+
+## Install Tiers
+
+CleanMol Core is the default installation. It includes the backend, frontend, RDKit, PDF extraction, LLM extraction pipeline, SMILES validation, CSV/XLSX export, Excel review workbooks, Dataset Quality Equalizer, built-in rule-based hypothesis generation, RDKit Morgan fingerprint baseline, heuristic scoring fallback, demo mode, provenance, and run metadata.
+
+The Advanced Discovery Pack is optional. It can help configure Chemprop v2 and REINVENT 4 in a separate advanced environment, but a failed advanced setup does not break CleanMol Core.
+
+FairChem/UMA is treated as an expert/manual handoff. CleanMol prepares `fairchem_uma_candidates.csv`, charge/spin hints, fragment warnings, and readiness notes. CleanMol does not run UMA by default and does not use UMA as proof of antimicrobial activity.
+
+## Start Here
+
+- `FOR_CHEMISTS.md`: plain-English setup, first run, demo, and output guide.
+- `FOR_COMPUTATIONAL_CHEMISTS.md`: optional advanced integrations and scoring notes.
+- `FOR_INSTITUTIONAL_REVIEWERS.md`: review posture, security, privacy, and deployment considerations.
+- `VALIDATION_STATUS.md`: what is implemented, benchmarked, experimental, or not validated.
+- `DATA_SOURCES_AND_LICENSES.md`: source provenance and licensing cautions.
+- `SYSTEM_REQUIREMENTS.md`: supported platforms and practical sizing guidance.
+- `TROUBLESHOOTING.md`: common install, API, PDF, Excel, and port issues.
+- `RELEASE_CHECKLIST.md`: public-preview readiness checklist.
 
 ## Who It Is For
 
@@ -112,9 +155,9 @@ Modern candidate prioritization favors cationic/amphiphilic disinfectant-relevan
 
 Exports include fields such as `modern_disinfectant_score`, `candidate_tier`, `modern_scaffold_tags`, `legacy_flags`, and `generation_recommendation`.
 
-## Recommended Discovery Stack
+## Optional Advanced Discovery Stack
 
-CleanMol is built around a staged discovery approach:
+CleanMol can support a staged discovery approach when optional tools are installed:
 
 - Activity modeling: Chemprop v2 multitask ensemble plus a Morgan-fingerprint baseline.
 - Generation: REINVENT 4 with a multi-objective CleanMol score profile.
@@ -194,6 +237,10 @@ Discovery and candidate outputs:
 - `discovery/resolved_generation_seeds.smi`
 - `discovery/ranked_lab_candidates.csv`
 - `discovery/ranked_lab_candidates_review.xlsx`
+- `discovery/ranked_hypothesis_candidates.csv`
+- `discovery/ranked_hypothesis_candidates_review.xlsx`
+- `discovery/DISCLAIMER.txt`
+- `discovery/run_environment.json`
 - `discovery/discovery_source_manifest.json`
 - `discovery/dataset_quality_report.json`
 

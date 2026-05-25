@@ -14,10 +14,12 @@ The scores are illustrative examples of CleanMol output shape. They should not b
 
 1. Open `discovery/dataset_quality_report.json`.
 2. Open `discovery/discovery_source_manifest.json`.
-3. Open `discovery/ranked_lab_candidates.csv`.
-4. Open `discovery/ranked_lab_candidates_review.csv`.
-5. Open `fairchem_uma_candidates.csv`.
-6. Read `PUBLIC_REVIEW_DISCLAIMER.md` in the repository root.
+3. Open `discovery/DISCLAIMER.txt`.
+4. Open `discovery/run_environment.json`.
+5. Open `discovery/ranked_hypothesis_candidates.csv`.
+6. Open `discovery/ranked_hypothesis_candidates_review.csv`.
+7. Open `fairchem_uma_candidates.csv`.
+8. Read `PUBLIC_REVIEW_DISCLAIMER.md` in the repository root.
 
 ## What This Packet Demonstrates
 
@@ -52,6 +54,10 @@ samples/public_review_demo/
     resolved_generation_seeds.smi
     ranked_lab_candidates.csv
     ranked_lab_candidates_review.csv
+    ranked_hypothesis_candidates.csv
+    ranked_hypothesis_candidates_review.csv
+    DISCLAIMER.txt
+    run_environment.json
     discovery_source_manifest.json
     dataset_quality_report.json
     discovery_run_summary.json

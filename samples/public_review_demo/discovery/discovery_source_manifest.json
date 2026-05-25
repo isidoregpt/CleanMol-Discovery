@@ -1,26 +1,25 @@
 [
   {
-    "source": "synthetic_public_review_demo",
-    "source_type": "demo_packet",
-    "status": "included",
-    "modernity": "demo_only_not_evidence",
-    "rows": 7,
-    "provenance_note": "Synthetic public-review sample rows created to demonstrate CleanMol output shape. Not measured data."
+    "source": "cleanmol_analysis_ready",
+    "status": "loaded",
+    "activity_rows": 0,
+    "toxicity_rows": 0
   },
   {
-    "source": "cleanmol_builtin_de_novo",
-    "source_type": "demo_generator_prior",
-    "status": "included",
-    "modernity": "demo_only_not_evidence",
-    "rows": 5,
-    "provenance_note": "Illustrative rule-based generated candidates. Not a validated REINVENT run."
+    "status": "not_provided"
   },
   {
-    "source": "fairchem_uma_candidates.csv",
-    "source_type": "optional_physics_review_handoff",
-    "status": "prepared_not_run",
-    "modernity": "optional_review_layer",
-    "rows": 5,
-    "provenance_note": "UMA readiness file only. No FairChem calculation was run for this demo packet."
+    "status": "skipped",
+    "reason": "include_public_sources is false"
+  },
+  {
+    "source": "reinvent4",
+    "status": "not_available",
+    "reason": "reinvent executable not found on PATH"
+  },
+  {
+    "source": "advanced_generation_fallback",
+    "status": "fallback_used",
+    "warning": "REINVENT 4 was unavailable, disabled, or errored. CleanMol used the built-in rule-based hypothesis generator instead."
   }
 ]

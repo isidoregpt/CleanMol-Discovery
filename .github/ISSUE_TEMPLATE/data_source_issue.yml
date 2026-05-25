@@ -1,0 +1,21 @@
+name: Data source issue
+description: Report source, provenance, licensing, or dataset-quality concerns.
+title: "[Data source]: "
+labels: ["data-source"]
+body:
+  - type: textarea
+    id: source
+    attributes:
+      label: Source or dataset
+    validations:
+      required: true
+  - type: textarea
+    id: issue
+    attributes:
+      label: What is wrong or unclear?
+    validations:
+      required: true
+  - type: textarea
+    id: license
+    attributes:
+      label: License or terms information

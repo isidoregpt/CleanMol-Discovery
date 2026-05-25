@@ -25,6 +25,16 @@ When you are finished:
 - `1-install-mac.command`: installs CleanMol's Python and frontend dependencies
 - `2-run-mac.command`: starts the local CleanMol app and opens it in your browser
 - `3-end-mac.command`: stops the local CleanMol servers
+- `4-install-advanced-discovery-pack.command`: optional advanced setup in a separate environment
+
+CleanMol Core works without the optional advanced pack. If advanced setup fails, normal CleanMol discovery still uses RDKit Morgan fingerprint baseline and heuristic triage scoring.
+
+To install the optional advanced pack later:
+
+```bash
+chmod +x 4-install-advanced-discovery-pack.command
+./4-install-advanced-discovery-pack.command
+```
 
 ## Default Folders
 

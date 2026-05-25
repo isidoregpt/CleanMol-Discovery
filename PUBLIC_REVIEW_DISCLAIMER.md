@@ -2,6 +2,16 @@
 
 CleanMol Discovery is being shared for public research review as a dataset-building and candidate-prioritization tool.
 
+CleanMol Discovery is an early-stage research triage tool.
+
+It helps organize chemistry data, generate disinfectant-relevant molecular hypotheses, and prioritize candidates for expert review.
+
+It does not prove antimicrobial activity, safety, synthesizability, formulation stability, environmental acceptability, regulatory compliance, or commercial suitability.
+
+Candidate rankings are not probabilities and are not laboratory results.
+
+Any candidate considered for real-world follow-up requires independent review by qualified chemists, microbiologists, toxicologists, formulation scientists, regulatory experts, and laboratory testing.
+
 It is not proof that any molecule is antimicrobial, safe, synthesizable, stable in a formulation, legally usable, regulatory-ready, or commercially suitable.
 
 ## What CleanMol Is For

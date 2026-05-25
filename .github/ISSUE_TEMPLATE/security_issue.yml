@@ -1,0 +1,18 @@
+name: Security issue
+description: Report information-security, privacy, API-key, or egress concerns.
+title: "[Security]: "
+labels: ["security"]
+body:
+  - type: markdown
+    attributes:
+      value: "Do not paste API keys, secrets, unpublished data, or private papers into this issue."
+  - type: textarea
+    id: concern
+    attributes:
+      label: Security or privacy concern
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment

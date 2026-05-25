@@ -6,13 +6,15 @@ from typing import Dict, Any, Optional
 import queue
 import threading
 import json
+import shutil
 from pathlib import Path
 from .pipeline import run_pipeline
 from .model_config import resolve_latest_model_defaults
 from .discovery_automation import run_discovery_automation
 from .online_source_catalog import search_huggingface_sources, source_catalog
+from .integrations.status import get_integration_status
 
-app = FastAPI(title="CleanMol Backend", version="1.0")
+app = FastAPI(title="CleanMol Backend", version="0.1.0-public-preview")
 
 app.add_middleware(
     CORSMiddleware,
@@ -47,9 +49,18 @@ class SourceSearchPayload(BaseModel):
 class DefaultsResolvePayload(BaseModel):
     keys: Optional[Dict[str, str]] = None
 
+
+class IntegrationStatusPayload(BaseModel):
+    keys: Optional[Dict[str, str]] = None
+    options: Optional[Dict[str, Any]] = None
+
+
+class DemoRunPayload(BaseModel):
+    output_dir: str
+
 @app.get("/")
 def root():
-    return {"status": "CleanMol backend is running", "version": "1.0"}
+    return {"status": "CleanMol backend is running", "version": "0.1.0-public-preview"}
 
 
 @app.get("/api/defaults")
@@ -60,6 +71,16 @@ def api_defaults():
 @app.post("/api/defaults/resolve")
 def api_resolve_defaults(payload: DefaultsResolvePayload):
     return resolve_latest_model_defaults(payload.keys or {})
+
+
+@app.get("/api/integrations/status")
+def api_integration_status_get():
+    return get_integration_status({}, {})
+
+
+@app.post("/api/integrations/status")
+def api_integration_status_post(payload: IntegrationStatusPayload):
+    return get_integration_status(payload.keys or {}, payload.options or {})
 
 
 @app.get("/api/discovery/sources")
@@ -80,6 +101,30 @@ def api_discovery_source_search(payload: SourceSearchPayload):
         raise HTTPException(status_code=400, detail="Search query is required")
     token = (payload.keys or {}).get("hf") or (payload.keys or {}).get("huggingface") or ""
     return search_huggingface_sources(payload.query, limit=payload.limit or 12, token=token)
+
+
+@app.post("/api/demo/run")
+def api_demo_run(payload: DemoRunPayload):
+    output_dir = Path(payload.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    repo_root = Path(__file__).resolve().parents[3]
+    source = repo_root / "samples" / "public_review_demo"
+    if not source.exists():
+        raise HTTPException(status_code=500, detail="Demo packet source folder is missing.")
+    target = output_dir / "public_review_demo"
+    if target.resolve() == source.resolve():
+        target = output_dir / "public_review_demo_run"
+    shutil.copytree(source, target, dirs_exist_ok=True)
+    summary_path = target / "DEMO_RUN_SUMMARY.json"
+    summary = {
+        "ok": True,
+        "demo_type": "synthetic_public_review_demo",
+        "output_dir": str(target),
+        "requires_api_keys": False,
+        "warning": "Synthetic demo only. Not measured antimicrobial evidence.",
+    }
+    summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    return {"ok": True, "summary": summary, "files": {"demo_packet": str(target), "summary": str(summary_path)}}
 
 
 def _safe_upload_name(filename: str) -> str:

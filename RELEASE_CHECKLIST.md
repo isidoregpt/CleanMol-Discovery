@@ -1,0 +1,24 @@
+# Release Checklist
+
+- [ ] README claim-control reviewed
+- [ ] Public disclaimer present
+- [ ] First-run warning present
+- [ ] Integrations panel implemented
+- [ ] CleanMol Core installs without advanced dependencies
+- [ ] Advanced Discovery Pack is optional
+- [ ] RDKit Morgan baseline implemented
+- [ ] Chemprop fallback path works
+- [ ] REINVENT fallback path works
+- [ ] Demo run works without API keys
+- [ ] Backend tests pass
+- [ ] Frontend builds successfully
+- [ ] GitHub Actions CI green
+- [ ] Benchmark report updated
+- [ ] Validation status document updated
+- [ ] Data-source licenses reviewed
+- [ ] Security notes updated
+- [ ] No API keys in logs or samples
+- [ ] Output packets include disclaimers
+- [ ] Output packets include provenance
+- [ ] Output packets include run metadata
+- [ ] Version bumped

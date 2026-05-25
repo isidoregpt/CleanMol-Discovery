@@ -1,5 +1,1 @@
 smiles,molecule_name,organism,assay_type,endpoint,value,units,activity_label,source,provenance
-CCCCCCCCCCCC[N+](C)(C)C,demo_qac_reference,Gram-positive demo organism,public-review-demo,MIC,demo_not_measured_demo_prior,NA,demo_prior_only,synthetic_public_review_demo,synthetic demo row; not measured
-CCCCCCCCCCCC[N+](C)(C)CCCCCCCC,demo_dialkyl_qac_reference,Gram-negative demo organism,public-review-demo,MIC,demo_not_measured_demo_prior,NA,demo_prior_only,synthetic_public_review_demo,synthetic demo row; not measured
-CCCCCCCCCCCC[n+]1ccccc1,demo_pyridinium_reference,fungal demo organism,public-review-demo,MIC,demo_not_measured_demo_prior,NA,demo_prior_only,synthetic_public_review_demo,synthetic demo row; not measured
-CCCCCCCC[P+](C)(C)C,demo_phosphonium_reference,biofilm demo assay,public-review-demo,screening_score,demo_not_measured_demo_prior,NA,demo_prior_only,synthetic_public_review_demo,synthetic demo row; not measured

@@ -1,8 +1,8 @@
 {
   "status": "not_ready",
   "status_label": "Not Ready",
-  "quality_score": 21.5,
-  "gates_passed": 1,
+  "quality_score": 27.17,
+  "gates_passed": 0,
   "gates_total": 10,
   "hard_failures": [
     "activity_evidence_depth",
@@ -10,6 +10,7 @@
     "label_density",
     "source_diversity",
     "modern_source_presence",
+    "organism_or_assay_breadth",
     "modern_seed_depth",
     "scaffold_diversity",
     "synthetic_prior_separation",
@@ -18,121 +19,110 @@
   "gates": [
     {
       "name": "activity_evidence_depth",
+      "score": 0,
       "passed": false,
-      "score": 1.6,
-      "value": 4,
+      "value": 0,
       "target": ">=250 unique activity molecules for curated-grade; >=50 for useful starter",
-      "recommendation": "Use this demo only to inspect output shape. Add measured activity data before trusting rankings."
+      "recommendation": "Pull ChEMBL/PubChem/HF activity sources or add more CleanMol-extracted papers."
     },
     {
       "name": "toxicity_selectivity_depth",
+      "score": 0,
       "passed": false,
-      "score": 2.0,
-      "value": 3,
+      "value": 0,
       "target": ">=150 unique toxicity/selectivity molecules",
-      "recommendation": "Add measured cytotoxicity, hemolysis, environmental, or selectivity data before review."
+      "recommendation": "Enable Tox21/ToxCast/ChAFF-style sources or upload hemolysis/cytotoxicity data."
     },
     {
       "name": "label_density",
+      "score": 0,
       "passed": false,
-      "score": 0.0,
       "value": {
         "activity_labels": 0,
         "toxicity_labels": 0
       },
       "target": ">=100 activity labels and >=50 toxicity/selectivity labels",
-      "recommendation": "Demo labels are synthetic placeholders, not measured endpoints."
+      "recommendation": "Prefer measured endpoints over unlabeled SMILES-only corpora."
     },
     {
       "name": "source_diversity",
+      "score": 75.0,
       "passed": false,
-      "score": 25.0,
-      "value": 1,
+      "value": 3,
       "target": ">=4 independent sources",
       "recommendation": "Combine uploaded data, CleanMol literature extraction, ChEMBL/PubChem, and HF safety sources."
     },
     {
       "name": "modern_source_presence",
+      "score": 33.33,
       "passed": false,
-      "score": 0.0,
-      "value": 0,
+      "value": 1,
       "target": ">=3 modern/current/maintained sources",
-      "recommendation": "Pull or upload current public/experimental sources before calling a packet review-ready."
+      "recommendation": "Use the Source Library and avoid relying on one old benchmark."
     },
     {
       "name": "organism_or_assay_breadth",
-      "passed": true,
-      "score": 100.0,
-      "value": [
-        "biofilm",
-        "fungal",
-        "gram_negative",
-        "gram_positive"
-      ],
+      "score": 0,
+      "passed": false,
+      "value": [],
       "target": ">=3 organism/assay groups, ideally Gram-positive, Gram-negative, fungal/biofilm",
-      "recommendation": "This demo shows breadth labels only; measured assay evidence is still required."
+      "recommendation": "Add papers or assays spanning multiple organisms and surface/formulation conditions."
     },
     {
       "name": "modern_seed_depth",
+      "score": 13.33,
       "passed": false,
-      "score": 13.3,
       "value": 4,
       "target": ">=30 modern generation seeds",
-      "recommendation": "Add more modern QAC, gemini, phosphonium, pyridinium, imidazolium, and safety-negative seeds."
+      "recommendation": "Extract more QAC/biocide papers or pull modern cationic/amphiphilic source data."
     },
     {
       "name": "scaffold_diversity",
-      "passed": false,
       "score": 50.0,
+      "passed": false,
       "value": 4,
       "target": ">=8 scaffold families",
-      "recommendation": "Add scaffold diversity before using rankings for real triage."
+      "recommendation": "Avoid a one-family QAC-only dataset; include phosphonium, pyridinium, imidazolium, gemini/bis variants, and safety negatives."
     },
     {
       "name": "synthetic_prior_separation",
+      "score": 0,
       "passed": false,
-      "score": 0.0,
       "value": 1.0,
       "target": "<=35% synthetic/model-prior dominance in training/review packet",
-      "recommendation": "This packet is intentionally synthetic and should never be treated as curated-grade."
+      "recommendation": "Keep synthetic priors separate and add measured/public experimental rows before calling the dataset curated-grade."
     },
     {
       "name": "candidate_quality",
+      "score": 100,
       "passed": false,
-      "score": 20.0,
       "value": {
-        "top_modern_fraction": 0.8,
-        "ranked_candidates": 5
+        "top_modern_fraction": 1.0,
+        "ranked_candidates": 12
       },
       "target": ">=80% of top 20 candidates modern_seed and >=20 ranked candidates",
-      "recommendation": "Increase candidate count and measured evidence before lab review."
+      "recommendation": "Tighten generation filters or increase modern seed diversity."
     }
   ],
   "metrics": {
-    "unique_activity_molecules": 4,
-    "unique_toxicity_molecules": 3,
+    "unique_activity_molecules": 0,
+    "unique_toxicity_molecules": 0,
     "unique_seed_molecules": 4,
-    "unique_ranked_candidates": 5,
-    "source_diversity": 1,
-    "modern_source_count": 0,
-    "organism_groups": [
-      "biofilm",
-      "fungal",
-      "gram_negative",
-      "gram_positive"
-    ],
+    "unique_ranked_candidates": 12,
+    "source_diversity": 3,
+    "modern_source_count": 1,
+    "organism_groups": [],
     "scaffold_diversity": 4,
     "synthetic_fraction": 1.0,
-    "top_candidate_modern_fraction": 0.8
+    "top_candidate_modern_fraction": 1.0
   },
   "recommendations": [
-    "Use this demo only to inspect output shape. Add measured activity data before trusting rankings.",
-    "Add measured cytotoxicity, hemolysis, environmental, or selectivity data before review.",
-    "Demo labels are synthetic placeholders, not measured endpoints.",
+    "Pull ChEMBL/PubChem/HF activity sources or add more CleanMol-extracted papers.",
+    "Enable Tox21/ToxCast/ChAFF-style sources or upload hemolysis/cytotoxicity data.",
+    "Prefer measured endpoints over unlabeled SMILES-only corpora.",
     "Combine uploaded data, CleanMol literature extraction, ChEMBL/PubChem, and HF safety sources.",
-    "Pull or upload current public/experimental sources before calling a packet review-ready.",
-    "Add more modern QAC, gemini, phosphonium, pyridinium, imidazolium, and safety-negative seeds."
+    "Use the Source Library and avoid relying on one old benchmark.",
+    "Add papers or assays spanning multiple organisms and surface/formulation conditions."
   ],
-  "equalizer_note": "The same quality gates are applied to uploaded and auto-created datasets. Synthetic/model-prior rows can help start discovery but cannot by themselves make a dataset curated-grade.",
-  "demo_warning": "This is a public review demo packet only. It is intentionally Not Ready."
+  "equalizer_note": "The same quality gates are applied to uploaded and auto-created datasets. Synthetic/model-prior rows can help start discovery but cannot by themselves make a dataset curated-grade."
 }

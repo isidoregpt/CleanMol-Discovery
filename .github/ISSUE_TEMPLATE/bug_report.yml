@@ -1,0 +1,24 @@
+name: Bug report
+description: Report a software problem in CleanMol Discovery.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+  - type: input
+    id: version
+    attributes:
+      label: CleanMol version
+      placeholder: 0.1.0-public-preview
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or screenshots

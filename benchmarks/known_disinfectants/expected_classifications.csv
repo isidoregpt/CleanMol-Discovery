@@ -1,0 +1,12 @@
+name,expected_candidate_tier,expected_note
+benzalkonium_chloride_like,review_candidate,QAC-like reference should be recognized as disinfectant-relevant
+cetylpyridinium_chloride_like,review_candidate,pyridinium scaffold should be recognized
+chlorhexidine_like,review_candidate,bis-cationic motif should be retained for review
+phosphonium_c12,review_candidate,phosphonium scaffold should be recognized
+pyridinium_c12,review_candidate,pyridinium scaffold should be recognized
+gemini_bis_qac,review_candidate,gemini/bis-QAC scaffold should be prioritized
+simple_monoamine,baseline_or_low_priority,neutral monoamine should not be a modern primary seed
+neutral_hydrocarbon,negative_control,neutral hydrocarbon should rank low
+invalid_smiles,reject,invalid SMILES should be handled gracefully
+salt_counterion,review_candidate_with_salt_warning,counterion should be flagged for review
+long_chain_cationic_toxicity_risk,review_with_toxicity_flag,long chains need toxicity/formulation review

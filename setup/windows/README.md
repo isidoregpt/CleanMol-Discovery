@@ -9,12 +9,16 @@ Before installing, CleanMol needs Python 3.10 or newer and Node.js 20.9 or newer
 1. Double-click `1-install-windows.bat`
 2. Double-click `2-run-windows.bat`
 3. Double-click `3-end-windows.bat` when you are finished
+4. Optional: double-click `4-install-advanced-discovery-pack.bat` only if you need Chemprop/advanced modeling
 
 ## What Each File Does
 
 - `1-install-windows.bat`: installs CleanMol's Python and frontend dependencies
 - `2-run-windows.bat`: starts the local CleanMol app and opens it in your browser
 - `3-end-windows.bat`: stops the local CleanMol servers
+- `4-install-advanced-discovery-pack.bat`: optional advanced setup in a separate environment
+
+CleanMol Core works without the optional advanced pack. If advanced setup fails, normal CleanMol discovery still uses RDKit Morgan fingerprint baseline and heuristic triage scoring.
 
 ## Default Folders
 

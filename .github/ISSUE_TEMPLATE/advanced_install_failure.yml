@@ -1,0 +1,26 @@
+name: Advanced install failure
+description: Report optional Chemprop, REINVENT, or FairChem/UMA setup issues.
+title: "[Advanced install]: "
+labels: ["advanced-install"]
+body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Chemprop v2
+        - REINVENT 4
+        - FairChem / UMA
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Installer output or error
+    validations:
+      required: true
+  - type: textarea
+    id: core_status
+    attributes:
+      label: Does CleanMol Core still run?

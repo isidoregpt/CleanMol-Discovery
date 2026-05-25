@@ -1,20 +1,31 @@
 {
-  "status": "demo_success",
-  "elapsed_seconds": 0.0,
-  "activity_rows": 4,
-  "toxicity_rows": 3,
+  "status": "success",
+  "elapsed_seconds": 0.06,
+  "activity_rows": 0,
+  "toxicity_rows": 0,
   "seed_count": 4,
-  "generated_count": 5,
-  "ranked_count": 5,
-  "generator_engine": "cleanmol_builtin_de_novo_demo",
-  "reinvent_status": "not_run_for_demo_packet",
-  "predictor_status": "demo_scores_only",
-  "activity_baseline_examples": 0,
-  "toxicity_baseline_examples": 0,
+  "generated_count": 12,
+  "ranked_count": 12,
+  "generator_engine": "auto",
+  "reinvent_status": "not_available",
+  "predictor_status": "rdkit_unavailable",
+  "morgan_reference_count": 0,
   "dataset_quality_status": "not_ready",
   "dataset_quality_label": "Not Ready",
-  "dataset_quality_score": 21.5,
-  "dataset_quality_gates": "1/10",
-  "safety_note": "Generated candidates are hypotheses for qualified chemist review; no synthesis instructions or efficacy claims are provided.",
-  "demo_warning": "This packet demonstrates output shape only and is not measured evidence."
+  "dataset_quality_score": 27.17,
+  "dataset_quality_gates": "0/10",
+  "integrations_used": [
+    "heuristic_discovery_profile"
+  ],
+  "integrations_unavailable": [
+    "chemprop_v2",
+    "reinvent4",
+    "fairchem_uma",
+    "anthropic_api",
+    "openai_api",
+    "google_gemini_api",
+    "huggingface_api"
+  ],
+  "score_warning": "Rank scores are triage scores. They are not probabilities and are not laboratory results.",
+  "safety_note": "Generated candidates are hypotheses for qualified chemist review; no synthesis instructions or efficacy claims are provided."
 }
