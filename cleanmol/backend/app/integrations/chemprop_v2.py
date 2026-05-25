@@ -18,7 +18,7 @@ def score_with_chemprop_if_available(*_: Any, **__: Any) -> Dict[str, Any]:
     workflow catches this status and continues with Morgan baseline scoring.
     """
     return {
-        "chemprop_prediction_status": "not_configured",
-        "chemprop_score_provenance": "chemprop_v2_optional_not_used",
+        "chemprop_prediction_status": "not_used_scaffolded_integration",
+        "chemprop_score_provenance": "chemprop_v2_scaffold_not_active",
         "warning": "Chemprop scoring failed or was unavailable. This run used RDKit Morgan fingerprint baseline and heuristic scoring instead.",
     }

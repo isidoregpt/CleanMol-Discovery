@@ -7,7 +7,7 @@ from app.integrations.reinvent4 import detect_reinvent4, write_seed_file
 
 def test_chemprop_placeholder_returns_safe_fallback_warning():
     result = score_with_chemprop_if_available()
-    assert result["chemprop_prediction_status"] == "not_configured"
+    assert result["chemprop_prediction_status"] == "not_used_scaffolded_integration"
     assert "Morgan fingerprint baseline" in result["warning"]
 
 

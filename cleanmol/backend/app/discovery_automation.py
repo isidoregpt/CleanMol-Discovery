@@ -796,7 +796,7 @@ def _estimate_scores(candidate: Dict[str, Any], seeds: List[Dict[str, Any]], bas
 
     score_sources_available = ["heuristic_discovery_profile"]
     score_sources_used = ["heuristic_discovery_profile"]
-    score_sources_failed = ["chemprop_v2_scaffolded_not_active", "external_imported_model_not_configured"]
+    score_sources_failed = ["chemprop_v2_scaffold_not_active", "external_imported_model_not_configured"]
     score_provenance = "heuristic_prior_no_reference_neighbors_available"
     if morgan_score is not None:
         activity_prior = round(0.55 * activity_prior + 0.45 * float(morgan_score), 2)
