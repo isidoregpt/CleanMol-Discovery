@@ -1,14 +1,13 @@
 {
   "status": "not_ready",
   "status_label": "Not Ready",
-  "quality_score": 27.17,
-  "gates_passed": 0,
+  "quality_score": 33.76,
+  "gates_passed": 1,
   "gates_total": 10,
   "hard_failures": [
     "activity_evidence_depth",
     "toxicity_selectivity_depth",
     "label_density",
-    "source_diversity",
     "modern_source_presence",
     "organism_or_assay_breadth",
     "modern_seed_depth",
@@ -19,9 +18,9 @@
   "gates": [
     {
       "name": "activity_evidence_depth",
-      "score": 0,
+      "score": 4.4,
       "passed": false,
-      "value": 0,
+      "value": 11,
       "target": ">=250 unique activity molecules for curated-grade; >=50 for useful starter",
       "recommendation": "Pull ChEMBL/PubChem/HF activity sources or add more CleanMol-extracted papers."
     },
@@ -35,10 +34,10 @@
     },
     {
       "name": "label_density",
-      "score": 0,
+      "score": 4.0,
       "passed": false,
       "value": {
-        "activity_labels": 0,
+        "activity_labels": 10,
         "toxicity_labels": 0
       },
       "target": ">=100 activity labels and >=50 toxicity/selectivity labels",
@@ -46,9 +45,9 @@
     },
     {
       "name": "source_diversity",
-      "score": 75.0,
-      "passed": false,
-      "value": 3,
+      "score": 100,
+      "passed": true,
+      "value": 5,
       "target": ">=4 independent sources",
       "recommendation": "Combine uploaded data, CleanMol literature extraction, ChEMBL/PubChem, and HF safety sources."
     },
@@ -70,17 +69,17 @@
     },
     {
       "name": "modern_seed_depth",
-      "score": 13.33,
+      "score": 33.33,
       "passed": false,
-      "value": 4,
+      "value": 10,
       "target": ">=30 modern generation seeds",
       "recommendation": "Extract more QAC/biocide papers or pull modern cationic/amphiphilic source data."
     },
     {
       "name": "scaffold_diversity",
-      "score": 50.0,
+      "score": 62.5,
       "passed": false,
-      "value": 4,
+      "value": 5,
       "target": ">=8 scaffold families",
       "recommendation": "Avoid a one-family QAC-only dataset; include phosphonium, pyridinium, imidazolium, gemini/bis variants, and safety negatives."
     },
@@ -105,14 +104,14 @@
     }
   ],
   "metrics": {
-    "unique_activity_molecules": 0,
+    "unique_activity_molecules": 11,
     "unique_toxicity_molecules": 0,
-    "unique_seed_molecules": 4,
+    "unique_seed_molecules": 10,
     "unique_ranked_candidates": 12,
-    "source_diversity": 3,
+    "source_diversity": 5,
     "modern_source_count": 1,
     "organism_groups": [],
-    "scaffold_diversity": 4,
+    "scaffold_diversity": 5,
     "synthetic_fraction": 1.0,
     "top_candidate_modern_fraction": 1.0
   },
@@ -120,9 +119,9 @@
     "Pull ChEMBL/PubChem/HF activity sources or add more CleanMol-extracted papers.",
     "Enable Tox21/ToxCast/ChAFF-style sources or upload hemolysis/cytotoxicity data.",
     "Prefer measured endpoints over unlabeled SMILES-only corpora.",
-    "Combine uploaded data, CleanMol literature extraction, ChEMBL/PubChem, and HF safety sources.",
     "Use the Source Library and avoid relying on one old benchmark.",
-    "Add papers or assays spanning multiple organisms and surface/formulation conditions."
+    "Add papers or assays spanning multiple organisms and surface/formulation conditions.",
+    "Extract more QAC/biocide papers or pull modern cationic/amphiphilic source data."
   ],
   "equalizer_note": "The same quality gates are applied to uploaded and auto-created datasets. Synthetic/model-prior rows can help start discovery but cannot by themselves make a dataset curated-grade."
 }

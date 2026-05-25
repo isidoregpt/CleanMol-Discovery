@@ -1028,7 +1028,7 @@ export default function Page() {
 
           {infoPanel === "about" && (
             <p className="text-sm text-white/70">
-              CleanMol Discovery builds auditable chemistry datasets and ranked disinfectant candidate packets for next-generation antimicrobial research. It is a public review preview for dataset building, candidate prioritization, and research support, not proof of efficacy, safety, synthesis feasibility, or regulatory readiness. It also prepares a FAIR Chemistry / UMA handoff file for optional atomistic physics review after candidates are ranked.
+              CleanMol Discovery builds auditable chemistry datasets and ranked disinfectant-relevant hypothesis packets for expert review. It is a public review preview for dataset building, candidate prioritization, and research support, not proof of efficacy, safety, synthesis feasibility, or regulatory readiness. It also prepares a FAIR Chemistry / UMA handoff file for optional atomistic physics review after candidates are ranked.
             </p>
           )}
 
@@ -1564,7 +1564,7 @@ export default function Page() {
                 </button>
               </div>
               <p className="text-xs text-white/45 mb-4">
-                CleanMol Core works without Chemprop, REINVENT, FairChem, Hugging Face, or provider keys. Optional tools add signals only when installed and enabled.
+                CleanMol Core works without Chemprop, REINVENT, FairChem, Hugging Face, or provider keys. Chemprop is scaffolded but not active scoring; REINVENT only runs when installed, configured, and enabled.
               </p>
               <div className="space-y-3">
                 {Object.entries(INTEGRATION_LABELS).map(([id, label]) => {

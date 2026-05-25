@@ -28,4 +28,4 @@ Click 3 when you are done.
 
 If step 1 says Python or Node.js is missing, install the missing item and run step 1 again. The setup file will tell you what it needs.
 
-The fourth setup file is optional. CleanMol Core works without Chemprop, REINVENT, FairChem, Hugging Face, or any advanced model install.
+The fourth setup file is optional. CleanMol Core works without Chemprop, REINVENT, FairChem, Hugging Face, or any advanced model install. Chemprop support is scaffolded but not active CleanMol scoring in this public preview.

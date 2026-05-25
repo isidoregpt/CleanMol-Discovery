@@ -3,8 +3,11 @@ set -u
 
 echo "CleanMol Advanced Discovery Pack (optional)"
 echo
-echo "This installs optional advanced tools into a separate environment:"
+echo "This installs optional advanced packages into a separate environment:"
 echo "  cleanmol/backend/.venv_advanced"
+echo
+echo "Public preview note: Chemprop support is scaffolded but not active CleanMol scoring yet."
+echo "CleanMol Core rankings still use RDKit Morgan fingerprint baseline and heuristic triage scoring."
 echo
 echo "If this setup fails, CleanMol Core is still available."
 echo "Candidate rankings will use RDKit Morgan fingerprint baseline and heuristic triage scoring unless another model is configured."
@@ -37,7 +40,8 @@ python -m pip install --upgrade pip || exit_failed
 python -m pip install "chemprop>=2" || exit_failed
 
 echo
-echo "Advanced Discovery Pack setup completed."
+echo "Advanced Discovery Pack package setup completed."
+echo "Chemprop is available only for manual/future integration work in this preview."
 echo "REINVENT 4 still requires separate expert configuration and a config file."
 echo "FairChem/UMA is an expert/manual integration and is not installed by this script."
 exit 0

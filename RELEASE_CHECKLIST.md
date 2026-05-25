@@ -1,5 +1,7 @@
 # Release Checklist
 
+This checklist is intentionally not fully checked for the public repository until the release owner confirms GitHub CI, manual frontend smoke checks, and external reviewer readiness. Chemprop remains scaffolded/not active scoring in this preview.
+
 - [ ] README claim-control reviewed
 - [ ] Public disclaimer present
 - [ ] First-run warning present

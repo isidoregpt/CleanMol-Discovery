@@ -27,7 +27,7 @@ When you are finished:
 - `3-end-mac.command`: stops the local CleanMol servers
 - `4-install-advanced-discovery-pack.command`: optional advanced setup in a separate environment
 
-CleanMol Core works without the optional advanced pack. If advanced setup fails, normal CleanMol discovery still uses RDKit Morgan fingerprint baseline and heuristic triage scoring.
+CleanMol Core works without the optional advanced pack. Chemprop support is scaffolded but not active CleanMol scoring in this public preview. If advanced setup fails, normal CleanMol discovery still uses RDKit Morgan fingerprint baseline and heuristic triage scoring.
 
 To install the optional advanced pack later:
 

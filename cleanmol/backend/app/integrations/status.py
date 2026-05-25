@@ -99,39 +99,27 @@ def get_integration_status(keys: dict | None = None, options: dict | None = None
 
     chemprop_disabled = _disabled(options, "chemprop_v2")
     chemprop_version = _version("chemprop")
-    chemprop_model = options.get("chemprop_model_path") or os.environ.get("CLEANMOL_CHEMPROP_MODEL", "")
-    chemprop_model_exists = bool(chemprop_model and Path(str(chemprop_model)).exists())
     if chemprop_disabled:
         statuses["chemprop_v2"] = _row(
             "disabled",
-            "Chemprop v2 is disabled. CleanMol will use the Morgan baseline and heuristic triage scoring.",
+            "Chemprop v2 is disabled. CleanMol uses the RDKit Morgan baseline and heuristic triage scoring.",
             required=False,
             enabled=False,
         )
-    elif not chemprop_version:
+    elif chemprop_version:
         statuses["chemprop_v2"] = _row(
-            "not_installed",
-            "Chemprop v2 is optional and not installed. CleanMol will use RDKit Morgan baseline and heuristic scoring.",
-            required=False,
-            enabled=False,
-        )
-    elif not chemprop_model_exists:
-        statuses["chemprop_v2"] = _row(
-            "installed_but_not_configured",
-            "Chemprop v2 is installed but no model checkpoint was found.",
+            "optional",
+            "Chemprop v2 is detected, but CleanMol's Chemprop scoring integration is scaffolded and not active in this public preview.",
             required=False,
             enabled=False,
             version=chemprop_version,
-            detail={"model_path": chemprop_model or ""},
         )
     else:
         statuses["chemprop_v2"] = _row(
-            "ready",
-            "Chemprop v2 is ready as an optional scoring signal.",
+            "optional",
+            "Chemprop v2 support is scaffolded but not active scoring in this public preview. CleanMol uses RDKit Morgan baseline and heuristic scoring.",
             required=False,
-            enabled=True,
-            version=chemprop_version,
-            detail={"model_path": chemprop_model},
+            enabled=False,
         )
 
     reinvent_disabled = _disabled(options, "reinvent4")

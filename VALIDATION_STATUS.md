@@ -21,7 +21,8 @@ CleanMol Discovery is a Public Research Preview.
 - Online source search and pulling
 - Candidate ranking weights
 - Dataset quality thresholds
-- Optional advanced Chemprop and REINVENT integration scaffolding
+- Chemprop integration scaffolding only; no active Chemprop scoring yet
+- Optional REINVENT detection/runtime handoff when externally installed and configured
 
 ## Handoff Only
 

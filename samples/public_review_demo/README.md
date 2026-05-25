@@ -17,7 +17,7 @@ The scores are illustrative examples of CleanMol output shape. They should not b
 3. Open `discovery/DISCLAIMER.txt`.
 4. Open `discovery/run_environment.json`.
 5. Open `discovery/ranked_hypothesis_candidates.csv`.
-6. Open `discovery/ranked_hypothesis_candidates_review.csv`.
+6. Open `discovery/ranked_hypothesis_candidates_review.xlsx`.
 7. Open `fairchem_uma_candidates.csv`.
 8. Read `PUBLIC_REVIEW_DISCLAIMER.md` in the repository root.
 
@@ -53,9 +53,10 @@ samples/public_review_demo/
     training_toxicity_table.csv
     resolved_generation_seeds.smi
     ranked_lab_candidates.csv
-    ranked_lab_candidates_review.csv
     ranked_hypothesis_candidates.csv
-    ranked_hypothesis_candidates_review.csv
+    ranked_hypothesis_candidates_review.xlsx
+    compatibility export: ranked_lab_candidates.csv
+    compatibility workbook: ranked_lab_candidates_review.xlsx
     DISCLAIMER.txt
     run_environment.json
     discovery_source_manifest.json

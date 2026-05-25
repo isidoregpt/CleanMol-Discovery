@@ -18,7 +18,7 @@ Before installing, CleanMol needs Python 3.10 or newer and Node.js 20.9 or newer
 - `3-end-windows.bat`: stops the local CleanMol servers
 - `4-install-advanced-discovery-pack.bat`: optional advanced setup in a separate environment
 
-CleanMol Core works without the optional advanced pack. If advanced setup fails, normal CleanMol discovery still uses RDKit Morgan fingerprint baseline and heuristic triage scoring.
+CleanMol Core works without the optional advanced pack. Chemprop support is scaffolded but not active CleanMol scoring in this public preview. If advanced setup fails, normal CleanMol discovery still uses RDKit Morgan fingerprint baseline and heuristic triage scoring.
 
 ## Default Folders
 

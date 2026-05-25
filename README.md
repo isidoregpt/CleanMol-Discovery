@@ -36,8 +36,8 @@ The demo packet is intentionally synthetic and labeled `Not Ready`. It exists to
 | RDKit Morgan baseline | Implemented | Yes | Default similarity baseline |
 | Candidate ranking | Implemented | Yes | Triage score, not probability |
 | Built-in candidate generator | Implemented | Yes | Rule-based hypothesis generator |
-| Chemprop v2 | Optional advanced | No | Install through Advanced Discovery Pack |
-| REINVENT 4 | Optional advanced/manual | No | Requires external config |
+| Chemprop v2 | Planned/scaffolded integration | No | Not active scoring in this public preview |
+| REINVENT 4 | Optional advanced/manual | No | Runs only when executable and config path are provided |
 | FairChem/UMA | Handoff only | No | Optional expert review path |
 | Lab validation | Not included | No | External requirement |
 
@@ -45,7 +45,7 @@ The demo packet is intentionally synthetic and labeled `Not Ready`. It exists to
 
 CleanMol Core is the default installation. It includes the backend, frontend, RDKit, PDF extraction, LLM extraction pipeline, SMILES validation, CSV/XLSX export, Excel review workbooks, Dataset Quality Equalizer, built-in rule-based hypothesis generation, RDKit Morgan fingerprint baseline, heuristic scoring fallback, demo mode, provenance, and run metadata.
 
-The Advanced Discovery Pack is optional. It can help configure Chemprop v2 and REINVENT 4 in a separate advanced environment, but a failed advanced setup does not break CleanMol Core.
+The Advanced Discovery Pack is optional. In this public preview, Chemprop v2 support is scaffolded but not active scoring. REINVENT 4 can be used only when the executable and config path are supplied. A failed advanced setup does not break CleanMol Core.
 
 FairChem/UMA is treated as an expert/manual handoff. CleanMol prepares `fairchem_uma_candidates.csv`, charge/spin hints, fragment warnings, and readiness notes. CleanMol does not run UMA by default and does not use UMA as proof of antimicrobial activity.
 
@@ -59,6 +59,7 @@ FairChem/UMA is treated as an expert/manual handoff. CleanMol prepares `fairchem
 - `SYSTEM_REQUIREMENTS.md`: supported platforms and practical sizing guidance.
 - `TROUBLESHOOTING.md`: common install, API, PDF, Excel, and port issues.
 - `RELEASE_CHECKLIST.md`: public-preview readiness checklist.
+- `cleanmol/frontend/smoke-checklists/`: manual frontend review checklists until a real browser test runner is added.
 
 ## Who It Is For
 
@@ -115,7 +116,7 @@ This path turns papers and patents into structured chemistry data.
 3. Select `Chemist upload`.
 4. Upload CSV or Excel data.
 5. Click `Run Discovery`.
-6. Review `ranked_lab_candidates_review.xlsx`.
+6. Review `ranked_hypothesis_candidates_review.xlsx`.
 
 This path lets a chemist use private data while still getting the same CleanMol quality gates.
 
@@ -159,8 +160,8 @@ Exports include fields such as `modern_disinfectant_score`, `candidate_tier`, `m
 
 CleanMol can support a staged discovery approach when optional tools are installed:
 
-- Activity modeling: Chemprop v2 multitask ensemble plus a Morgan-fingerprint baseline.
-- Generation: REINVENT 4 with a multi-objective CleanMol score profile.
+- Activity modeling: future Chemprop v2 multitask integration plus the active RDKit Morgan-fingerprint baseline.
+- Generation: optional REINVENT 4 with a multi-objective CleanMol score profile when externally installed and configured.
 - Physics and 3D review: FairChem UMA with the `omol` task and OMol25-style charge/spin-aware inputs.
 - Data foundation: CleanMol-curated QAC/biocide literature plus public bioactivity and safety sources such as PubChem BioAssay, ChEMBL, Tox21/ToxCast, EPA CompTox, and hemolysis/selectivity assays where available.
 
@@ -235,10 +236,9 @@ Discovery and candidate outputs:
 - `discovery/training_activity_table.csv`
 - `discovery/training_toxicity_table.csv`
 - `discovery/resolved_generation_seeds.smi`
-- `discovery/ranked_lab_candidates.csv`
-- `discovery/ranked_lab_candidates_review.xlsx`
 - `discovery/ranked_hypothesis_candidates.csv`
 - `discovery/ranked_hypothesis_candidates_review.xlsx`
+- compatibility exports: `discovery/ranked_lab_candidates.csv` and `discovery/ranked_lab_candidates_review.xlsx`
 - `discovery/DISCLAIMER.txt`
 - `discovery/run_environment.json`
 - `discovery/discovery_source_manifest.json`
@@ -246,8 +246,8 @@ Discovery and candidate outputs:
 
 What those files help answer:
 
-- `ranked_lab_candidates.csv`: Which molecules should a chemist review first?
-- `ranked_lab_candidates_review.xlsx`: What evidence, scores, and warnings support each candidate?
+- `ranked_hypothesis_candidates.csv`: Which hypotheses should a chemist review first?
+- `ranked_hypothesis_candidates_review.xlsx`: What evidence, scores, and warnings support each hypothesis?
 - `dataset_quality_report.json`: Is this dataset strong enough to trust as more than a baseline?
 - `discovery_source_manifest.json`: Where did the data come from?
 - `candidate_generation_seed.smi`: Which molecules are suitable seeds for de novo generation?

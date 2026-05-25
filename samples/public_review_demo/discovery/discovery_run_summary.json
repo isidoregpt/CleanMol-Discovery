@@ -1,21 +1,22 @@
 {
   "status": "success",
-  "elapsed_seconds": 0.06,
-  "activity_rows": 0,
+  "elapsed_seconds": 0.11,
+  "activity_rows": 11,
   "toxicity_rows": 0,
-  "seed_count": 4,
+  "seed_count": 10,
   "generated_count": 12,
   "ranked_count": 12,
   "generator_engine": "auto",
-  "reinvent_status": "not_available",
-  "predictor_status": "rdkit_unavailable",
-  "morgan_reference_count": 0,
+  "reinvent_status": "not_installed",
+  "predictor_status": "ready",
+  "morgan_reference_count": 10,
   "dataset_quality_status": "not_ready",
   "dataset_quality_label": "Not Ready",
-  "dataset_quality_score": 27.17,
-  "dataset_quality_gates": "0/10",
+  "dataset_quality_score": 33.76,
+  "dataset_quality_gates": "1/10",
   "integrations_used": [
-    "heuristic_discovery_profile"
+    "heuristic_discovery_profile",
+    "rdkit_morgan_baseline"
   ],
   "integrations_unavailable": [
     "chemprop_v2",

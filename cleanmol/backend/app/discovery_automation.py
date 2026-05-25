@@ -640,10 +640,15 @@ def _run_reinvent_if_available(
     seeds: List[Dict[str, Any]],
     target_count: int,
     timeout_seconds: int,
+    config_path: Optional[str] = None,
+    enabled: bool = True,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    if not enabled:
+        return [], {"status": "disabled", "reason": "REINVENT 4 integration disabled for this run"}
+
     reinvent = shutil.which("reinvent")
     if not reinvent:
-        return [], {"status": "not_available", "reason": "reinvent executable not found on PATH"}
+        return [], {"status": "not_installed", "reason": "reinvent executable not found on PATH"}
 
     run_dir = discovery_dir / "reinvent_run"
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -654,19 +659,19 @@ def _run_reinvent_if_available(
 
     # REINVENT configs vary by installed version. CleanMol writes the seed file
     # and launches a user-provided TOML if present; otherwise it falls back.
-    config_path = run_dir / "reinvent.toml"
-    if not config_path.exists():
+    resolved_config_path = Path(config_path).expanduser() if config_path else run_dir / "reinvent.toml"
+    if not resolved_config_path.exists():
         return [], {
-            "status": "config_needed",
+            "status": "config_missing",
             "reason": "REINVENT is installed, but no reinvent.toml exists yet.",
             "seed_file": str(seed_file),
-            "config_path": str(config_path),
+            "config_path": str(resolved_config_path),
         }
 
     log_path = run_dir / "reinvent.log"
     try:
         completed = subprocess.run(
-            [reinvent, "-l", str(log_path), str(config_path)],
+            [reinvent, "-l", str(log_path), str(resolved_config_path)],
             cwd=str(run_dir),
             timeout=timeout_seconds,
             capture_output=True,
@@ -674,7 +679,12 @@ def _run_reinvent_if_available(
             check=False,
         )
     except Exception as exc:
-        return [], {"status": "error", "error": str(exc), "seed_file": str(seed_file)}
+        return [], {
+            "status": "error",
+            "error": str(exc),
+            "seed_file": str(seed_file),
+            "config_path": str(resolved_config_path),
+        }
 
     generated_path_candidates = list(run_dir.glob("*.smi")) + list(run_dir.glob("*.csv"))
     candidates: List[Dict[str, Any]] = []
@@ -693,7 +703,7 @@ def _run_reinvent_if_available(
                                 "name": row.get("name") or row.get("Name") or f"reinvent_{len(candidates) + 1}",
                                 "smiles": row[smiles_col],
                                 "generator_engine": "reinvent4",
-                                "generation_provenance": "reinvent_output",
+                                "generation_provenance": "reinvent4_output",
                             }
                         )
             else:
@@ -706,7 +716,7 @@ def _run_reinvent_if_available(
                                 "name": parts[1] if len(parts) > 1 else f"reinvent_{len(candidates) + 1}",
                                 "smiles": parts[0],
                                 "generator_engine": "reinvent4",
-                                "generation_provenance": "reinvent_output",
+                                "generation_provenance": "reinvent4_output",
                             }
                         )
                     if len(candidates) >= target_count:
@@ -718,10 +728,17 @@ def _run_reinvent_if_available(
 
     for candidate in candidates:
         enrich_modern_discovery_fields(candidate)
+        candidate["reinvent_config_path"] = str(resolved_config_path)
+        candidate["reinvent_log_path"] = str(log_path)
+
+    status = "completed" if completed.returncode == 0 and candidates else "error"
+    if completed.returncode == 0 and not candidates:
+        status = "no_candidates"
 
     return candidates[:target_count], {
-        "status": "ran",
+        "status": status,
         "return_code": completed.returncode,
+        "config_path": str(resolved_config_path),
         "log_path": str(log_path),
         "stdout": completed.stdout[-2000:],
         "stderr": completed.stderr[-2000:],
@@ -779,7 +796,7 @@ def _estimate_scores(candidate: Dict[str, Any], seeds: List[Dict[str, Any]], bas
 
     score_sources_available = ["heuristic_discovery_profile"]
     score_sources_used = ["heuristic_discovery_profile"]
-    score_sources_failed = ["chemprop_v2_not_installed", "external_imported_model_not_configured"]
+    score_sources_failed = ["chemprop_v2_scaffolded_not_active", "external_imported_model_not_configured"]
     score_provenance = "heuristic_prior_no_reference_neighbors_available"
     if morgan_score is not None:
         activity_prior = round(0.55 * activity_prior + 0.45 * float(morgan_score), 2)
@@ -894,7 +911,8 @@ def _write_review_workbook(
         "nearest_reference_source", "nearest_reference_activity_label", "nearest_reference_endpoint",
         "nearest_reference_value", "nearest_reference_units", "morgan_baseline_score",
         "morgan_neighbor_count", "morgan_score_provenance",
-        "generator_engine", "generation_provenance", "source_seed_id", "score_provenance",
+        "generator_engine", "generation_provenance", "source_seed_id",
+        "reinvent_config_path", "reinvent_log_path", "reinvent_status", "score_provenance",
         "score_sources_used", "score_sources_available", "score_sources_failed", "score_limitations",
         "chemist_review_status", "chemist_review_notes", "reject_reason", "follow_up_literature_needed",
         "synthesis_feasibility_review_needed", "toxicity_review_needed", "regulatory_review_needed",
@@ -931,6 +949,9 @@ def _write_review_workbook(
             row.get("generator_engine", ""),
             row.get("generation_provenance", ""),
             row.get("source_seed_id", ""),
+            row.get("reinvent_config_path", ""),
+            row.get("reinvent_log_path", ""),
+            row.get("reinvent_status", ""),
             row.get("score_provenance", ""),
             json.dumps(row.get("score_sources_used") or []),
             json.dumps(row.get("score_sources_available") or []),
@@ -1110,16 +1131,29 @@ def run_discovery_automation(
     reinvent_meta: Dict[str, Any] = {"status": "skipped"}
     generated: List[Dict[str, Any]] = []
     if generator_engine in {"auto", "reinvent4"}:
+        disabled_integrations = options.get("disabled_integrations") or []
+        if isinstance(disabled_integrations, str):
+            disabled_integrations = [item.strip() for item in disabled_integrations.split(",")]
         generated, reinvent_meta = _run_reinvent_if_available(
             discovery_dir,
             seeds,
             target_count=target_count,
             timeout_seconds=int(options.get("reinvent_timeout_seconds") or 1800),
+            config_path=options.get("reinvent_config_path") or "",
+            enabled="reinvent4" not in set(disabled_integrations),
         )
+        for candidate in generated:
+            if candidate.get("generator_engine") == "reinvent4":
+                candidate["reinvent_status"] = reinvent_meta.get("status", "")
     if len(generated) < target_count and options.get("allow_builtin_generator", True):
-        generated.extend(_builtin_generate_candidates(seeds, target_count=target_count - len(generated)))
+        fallback_candidates = _builtin_generate_candidates(seeds, target_count=target_count - len(generated))
+        for candidate in fallback_candidates:
+            candidate["reinvent_status"] = "not_available_or_disabled"
+            candidate["reinvent_config_path"] = reinvent_meta.get("config_path", "")
+            candidate["reinvent_log_path"] = reinvent_meta.get("log_path", "")
+        generated.extend(fallback_candidates)
     manifests.append({"source": "reinvent4", **reinvent_meta})
-    if reinvent_meta.get("status") != "completed":
+    if reinvent_meta.get("status") != "completed" and len(generated) > 0:
         manifests.append({
             "source": "advanced_generation_fallback",
             "status": "fallback_used",
@@ -1142,6 +1176,7 @@ def run_discovery_automation(
         "morgan_neighbor_count", "morgan_score_provenance",
         "activity_baseline_neighbors", "toxicity_baseline_neighbors",
         "generator_engine", "generation_provenance", "source_seed_id", "score_sources_used",
+        "reinvent_config_path", "reinvent_log_path", "reinvent_status",
         "score_sources_available", "score_sources_failed", "score_provenance", "score_limitations",
         "chemist_review_status", "chemist_review_notes", "reject_reason", "follow_up_literature_needed",
         "synthesis_feasibility_review_needed", "toxicity_review_needed", "regulatory_review_needed",
@@ -1187,7 +1222,7 @@ def run_discovery_automation(
     integrations_unavailable = [
         name
         for name, row in integration_status.items()
-        if row.get("status") in {"not_installed", "installed_but_not_configured", "api_key_missing", "disabled", "error"}
+        if row.get("status") in {"not_installed", "installed_but_not_configured", "api_key_missing", "disabled", "error", "optional"}
         and not row.get("required")
     ]
     summary = {

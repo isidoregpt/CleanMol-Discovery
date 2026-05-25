@@ -1,1 +1,12 @@
 smiles,molecule_name,organism,assay_type,endpoint,value,units,activity_label,source,provenance
+CCCCCCCCCCCC[N+](C)(C)Cc1ccccc1.[Cl-],benzalkonium_chloride_like,,synthetic_benchmark_activity,synthetic_benchmark_activity,8.0,synthetic_units,active,chemist_upload:input.csv,experimental_or_imported
+CCCCCCCCCCCCCCCC[n+]1ccccc1.[Cl-],cetylpyridinium_chloride_like,,synthetic_benchmark_activity,synthetic_benchmark_activity,8.0,synthetic_units,active,chemist_upload:input.csv,experimental_or_imported
+N=C(N)NCCCCCCNC(=N)N,chlorhexidine_like,,synthetic_benchmark_activity,synthetic_benchmark_activity,16.0,synthetic_units,active,chemist_upload:input.csv,experimental_or_imported
+CCCCCCCCCCCC[P+](C)(C)C,phosphonium_c12,,synthetic_benchmark_activity,synthetic_benchmark_activity,12.0,synthetic_units,active,chemist_upload:input.csv,experimental_or_imported
+CCCCCCCCCCCC[n+]1ccccc1,pyridinium_c12,,synthetic_benchmark_activity,synthetic_benchmark_activity,8.0,synthetic_units,active,chemist_upload:input.csv,experimental_or_imported
+CCCCCCCCCC[N+](C)(C)CCC[N+](C)(C)CCCCCCCCCC,gemini_bis_qac,,synthetic_benchmark_activity,synthetic_benchmark_activity,8.0,synthetic_units,active,chemist_upload:input.csv,experimental_or_imported
+CCCCN,simple_monoamine,,synthetic_benchmark_activity,synthetic_benchmark_activity,512.0,synthetic_units,inactive,chemist_upload:input.csv,experimental_or_imported
+CCCCCCCCCCCC,neutral_hydrocarbon,,synthetic_benchmark_activity,synthetic_benchmark_activity,512.0,synthetic_units,inactive,chemist_upload:input.csv,experimental_or_imported
+not_a_smiles,invalid_smiles,,synthetic_benchmark_activity,synthetic_benchmark_activity,,synthetic_units,,chemist_upload:input.csv,experimental_or_imported
+CCCCCCCCCCCC[N+](C)(C)C.[Br-],salt_counterion,,synthetic_benchmark_activity,synthetic_benchmark_activity,16.0,synthetic_units,active,chemist_upload:input.csv,experimental_or_imported
+CCCCCCCCCCCCCCCCCC[N+](C)(C)C,long_chain_cationic_toxicity_risk,,synthetic_benchmark_activity,synthetic_benchmark_activity,24.0,synthetic_units,active,chemist_upload:input.csv,experimental_or_imported

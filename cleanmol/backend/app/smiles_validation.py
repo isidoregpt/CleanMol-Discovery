@@ -123,7 +123,7 @@ def validate_and_enrich_smiles(molecules: list, compute_properties: bool = True)
                 mol["smiles_error"] = "Invalid SMILES structure"
                 stats["invalid_smiles"] += 1
                 apply_amphiphile_and_discovery(mol)
-                print(f"    ✗ Invalid: {mol.get('name_as_written', mol.get('molecule_id', 'unknown'))}")
+                print(f"    Invalid: {mol.get('name_as_written', mol.get('molecule_id', 'unknown'))}")
                 continue
 
             # Valid - canonicalize
@@ -158,7 +158,7 @@ def validate_and_enrich_smiles(molecules: list, compute_properties: bool = True)
             mol["smiles_error"] = str(e)
             stats["invalid_smiles"] += 1
             apply_amphiphile_and_discovery(mol)
-            print(f"    ✗ Error validating {mol.get('name_as_written', mol.get('molecule_id', 'unknown'))}: {e}")
+            print(f"    Error validating {mol.get('name_as_written', mol.get('molecule_id', 'unknown'))}: {e}")
 
     print(f"[VALIDATE] Complete: {stats['valid_smiles']}/{stats['with_smiles']} SMILES valid, {stats['properties_computed']} properties computed")
 

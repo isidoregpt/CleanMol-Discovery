@@ -16,7 +16,7 @@ Rows include nearest-reference fields, Morgan score provenance, score source lis
 
 ## Optional Chemprop v2
 
-Chemprop v2 is optional. CleanMol detects installation and model checkpoint availability. If Chemprop is missing, unconfigured, or errors, the run continues with RDKit Morgan baseline and heuristic triage scoring.
+Chemprop v2 support is scaffolded but not active scoring in this public preview. CleanMol may detect whether Chemprop is present, but it does not train, load, or run Chemprop predictions yet. Discovery runs continue with RDKit Morgan baseline and heuristic triage scoring.
 
 Use the Advanced Discovery Pack script only when you want a separate advanced environment:
 

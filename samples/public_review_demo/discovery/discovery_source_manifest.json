@@ -6,7 +6,11 @@
     "toxicity_rows": 0
   },
   {
-    "status": "not_provided"
+    "status": "loaded",
+    "path": "benchmarks\\known_disinfectants\\input.csv",
+    "rows_read": 11,
+    "activity_rows": 11,
+    "toxicity_rows": 0
   },
   {
     "status": "skipped",
@@ -14,7 +18,7 @@
   },
   {
     "source": "reinvent4",
-    "status": "not_available",
+    "status": "not_installed",
     "reason": "reinvent executable not found on PATH"
   },
   {
